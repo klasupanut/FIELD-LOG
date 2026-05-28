@@ -254,6 +254,18 @@ function App() {
   };
 
   useEffect(() => {
+    const pullIfDue = () => {
+      if (GOOGLE_APPS_SCRIPT_WEB_APP_URL && Date.now() - lastRemotePullRef.current > 30000) pullRemoteData();
+    };
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) pullIfDue();
+    };
+
+    pullIfDue();
+    window.addEventListener("focus", pullIfDue);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     const timer = window.setInterval(() => {
       refreshFromLocal();
       if (GOOGLE_APPS_SCRIPT_WEB_APP_URL) {
@@ -261,7 +273,11 @@ function App() {
         if (Date.now() - lastRemotePullRef.current > 30000) pullRemoteData();
       }
     }, 1000);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", pullIfDue);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [logs, locations, todos, settings]);
 
   const pageProps = { logs, locations, todos, settings, saveSettings, addWorkLog, addLocation, addTodo, updateTodo, deleteTodo, setPage, updateLogLocation, updateCustomLocation, deleteCustomLocation, syncPending: syncNow, notify };
@@ -519,7 +535,10 @@ function CalendarView({ logs, locations }) {
           return (
             <div key={`${day}-${index}`} className="min-h-[74px] bg-white p-1.5 sm:min-h-24 sm:p-2">
               {day && <div className="mb-2 text-sm font-bold">{Number(day.slice(-2))}</div>}
-              <div className="space-y-1">
+              <div className="flex min-h-3 flex-wrap gap-1 sm:hidden">
+                {dayLogs.slice(0, 3).map((log) => <LocationDot key={`${log.id}-mobile-dot`} name={log.location} locations={locations} />)}
+              </div>
+              <div className="mt-1 hidden space-y-1 sm:block">
                 {dayLogs.slice(0, 2).map((log) => <LocationTag key={log.id} name={log.location} locations={locations} small />)}
               </div>
             </div>
@@ -817,7 +836,7 @@ function DashboardCalendar({ logs, locations }) {
 
 function LocationDot({ name, locations }) {
   const color = findLocation(locations, name)?.color || "#4f8f7a";
-  return <span className="block h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} title={name} />;
+  return <span className="block h-2.5 w-2.5 rounded-full border border-white shadow-sm" style={{ backgroundColor: color }} title={name} />;
 }
 
 function PageTitle({ title, subtitle }) {
