@@ -2,7 +2,7 @@
 import { createRoot } from "https://esm.sh/react-dom@18.3.1/client";
 import { END_TIME, GOOGLE_APPS_SCRIPT_WEB_APP_URL, GOOGLE_SHEET_URL, START_TIME } from "./src/data.js";
 import { storage } from "./src/storage.js";
-import { syncLocation, syncTodo, syncWorkLog } from "./src/sync.js";
+import { fetchRemoteData, syncLocation, syncTodo, syncWorkLog } from "./src/sync.js";
 import { formatDate, monthKey, todayIso, uid } from "./src/utils.js";
 
 storage.init();
@@ -25,6 +25,8 @@ function App() {
   const [settings, setSettings] = useState(storage.getSettings());
   const [toast, setToast] = useState("");
   const [lastAutoRefresh, setLastAutoRefresh] = useState("");
+  const lastRemotePullRef = React.useRef(0);
+  const isPullingRemoteRef = React.useRef(false);
 
   const saveLogs = (next) => {
     setLogs(next);
@@ -223,21 +225,52 @@ function App() {
     }
   };
 
+  const pullRemoteData = async ({ quiet = true } = {}) => {
+    if (!GOOGLE_APPS_SCRIPT_WEB_APP_URL || isPullingRemoteRef.current) return;
+    isPullingRemoteRef.current = true;
+
+    try {
+      const remote = await fetchRemoteData(GOOGLE_APPS_SCRIPT_WEB_APP_URL);
+      const nextLogs = mergeRemoteLogs(storage.getLogs(), remote.workLogs || []);
+      const nextLocations = mergeRemoteLocations(storage.getLocations(), remote.locations || []);
+      const nextTodos = mergeRemoteTodos(storage.getTodos(), remote.todos || []);
+
+      saveLogs(nextLogs);
+      saveLocations(nextLocations);
+      saveTodos(nextTodos);
+      lastRemotePullRef.current = Date.now();
+      saveSettings({ ...storage.getSettings(), lastSyncStatus: "Pulled latest Google Sheet data", lastSyncAt: new Date().toISOString() });
+      if (!quiet) notify("Pulled latest Google Sheet data.");
+    } catch (error) {
+      saveSettings({ ...storage.getSettings(), lastSyncStatus: error.message, lastSyncAt: new Date().toISOString() });
+    } finally {
+      isPullingRemoteRef.current = false;
+    }
+  };
+
+  const syncNow = async () => {
+    await syncPending();
+    await pullRemoteData({ quiet: false });
+  };
+
   useEffect(() => {
     const timer = window.setInterval(() => {
       refreshFromLocal();
-      if (GOOGLE_APPS_SCRIPT_WEB_APP_URL) syncPending();
+      if (GOOGLE_APPS_SCRIPT_WEB_APP_URL) {
+        syncPending();
+        if (Date.now() - lastRemotePullRef.current > 30000) pullRemoteData();
+      }
     }, 1000);
     return () => window.clearInterval(timer);
   }, [logs, locations, todos, settings]);
 
-  const pageProps = { logs, locations, todos, settings, saveSettings, addWorkLog, addLocation, addTodo, updateTodo, deleteTodo, setPage, updateLogLocation, updateCustomLocation, deleteCustomLocation, syncPending, notify };
+  const pageProps = { logs, locations, todos, settings, saveSettings, addWorkLog, addLocation, addTodo, updateTodo, deleteTodo, setPage, updateLogLocation, updateCustomLocation, deleteCustomLocation, syncPending: syncNow, notify };
 
   return (
     <div className="min-h-screen bg-[#f6f8fb] lg:flex">
       <Nav page={page} setPage={setPage} />
       <div className="min-w-0 flex-1 lg:pl-64">
-      <Header settings={settings} pendingCount={logs.filter((item) => item.syncStatus !== "Synced").length + locations.filter((item) => item.source === "Custom" && item.syncStatus !== "Synced").length} syncPending={syncPending} lastAutoRefresh={lastAutoRefresh} />
+      <Header settings={settings} pendingCount={logs.filter((item) => item.syncStatus !== "Synced").length + locations.filter((item) => item.source === "Custom" && item.syncStatus !== "Synced").length} syncPending={syncNow} lastAutoRefresh={lastAutoRefresh} />
       <main className="mx-auto flex w-full max-w-[1440px] flex-col gap-4 px-4 pb-24 pt-4 sm:px-6 lg:px-8 lg:pb-8 lg:pt-6">
         <section className="min-w-0 flex-1">
           {page === "dashboard" && <Dashboard {...pageProps} />}
@@ -743,7 +776,7 @@ function SummaryLine({ label, value, tone }) {
 
   return (
     <div className="flex items-center gap-3">
-      <div className={`grid h-9 w-9 place-items-center rounded-full ${tones[tone] || tones.emerald}`}>
+      <div className={`grid h-[18px] w-[18px] place-items-center rounded-full ${tones[tone] || tones.emerald}`}>
         <span className="summary-pulse-dot" />
       </div>
       <div>
@@ -884,6 +917,104 @@ function sortTodos(items) {
     if (dueDiff !== 0) return dueDiff;
     return (priorityRank[a.priority] ?? 9) - (priorityRank[b.priority] ?? 9);
   });
+}
+
+function mergeRemoteLogs(localLogs, remoteRows) {
+  const byDate = new Map(localLogs.map((log) => [log.workDate, log]));
+
+  for (const row of remoteRows) {
+    const workDate = normalizeSheetDate(row["Work Date"]);
+    if (!workDate) continue;
+
+    const local = byDate.get(workDate);
+    if (local?.syncStatus && local.syncStatus !== "Synced") continue;
+
+    byDate.set(workDate, {
+      id: local?.id || `sheet-log-${workDate}`,
+      createdAt: normalizeSheetTimestamp(row["Timestamp Created"]) || local?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      workDate,
+      startTime: row["Start Time"] || START_TIME,
+      endTime: row["End Time"] || END_TIME,
+      location: row.Location || local?.location || "",
+      note: row.Note || "",
+      syncStatus: "Synced",
+    });
+  }
+
+  return sortLogsByDateDesc(Array.from(byDate.values()));
+}
+
+function mergeRemoteLocations(localLocations, remoteRows) {
+  const byName = new Map(localLocations.map((location) => [location.name, location]));
+
+  for (const row of remoteRows) {
+    const name = (row["Location Name"] || "").trim();
+    if (!name) continue;
+
+    const local = byName.get(name);
+    if (local?.syncStatus && local.syncStatus !== "Synced") continue;
+
+    byName.set(name, {
+      id: local?.id || `sheet-location-${name.toLowerCase().replace(/\s+/g, "-")}`,
+      createdAt: normalizeSheetTimestamp(row["Timestamp Created"]) || local?.createdAt || new Date().toISOString(),
+      name,
+      category: row.Category || local?.category || "",
+      color: row.Color || local?.color || "#1f7a5c",
+      source: row.Source || local?.source || "Custom",
+      syncStatus: "Synced",
+    });
+  }
+
+  return Array.from(byName.values());
+}
+
+function mergeRemoteTodos(localTodos, remoteRows) {
+  const byKey = new Map(localTodos.map((todo) => [todoKey(todo), todo]));
+
+  for (const row of remoteRows) {
+    const task = (row.Task || "").trim();
+    if (!task) continue;
+
+    const createdAt = normalizeSheetTimestamp(row["Timestamp Created"]) || new Date().toISOString();
+    const dueDate = normalizeSheetDate(row["Due Date"]);
+    const key = todoKey({ createdAt, dueDate, task });
+    const local = byKey.get(key);
+    if (local?.syncStatus && local.syncStatus !== "Synced") continue;
+
+    byKey.set(key, {
+      id: local?.id || `sheet-todo-${createdAt}-${dueDate}-${task}`.replace(/\s+/g, "-"),
+      createdAt,
+      dueDate,
+      task,
+      priority: row.Priority || "Normal",
+      status: row.Status || "Open",
+      note: row.Note || "",
+      syncStatus: "Synced",
+    });
+  }
+
+  return sortTodos(Array.from(byKey.values()));
+}
+
+function todoKey(todo) {
+  return `${todo.createdAt || ""}|${todo.dueDate || ""}|${todo.task || ""}`;
+}
+
+function normalizeSheetDate(value) {
+  if (!value) return "";
+  const text = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (match) return `${match[3]}-${match[2].padStart(2, "0")}-${match[1].padStart(2, "0")}`;
+  const date = new Date(text);
+  return Number.isNaN(date.getTime()) ? text : date.toISOString().slice(0, 10);
+}
+
+function normalizeSheetTimestamp(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toISOString();
 }
 
 function findLocation(locations, name) {

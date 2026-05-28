@@ -38,26 +38,57 @@ textarea {
 
 .summary-pulse-dot {
   display: inline-block;
-  height: 10px;
-  width: 10px;
+  position: relative;
+  height: 6px;
+  width: 6px;
   border-radius: 999px;
   background: currentColor;
-  box-shadow: 0 0 0 0 currentColor;
-  animation: summary-pulse 2.8s ease-in-out infinite;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.72);
+  animation: summary-dot-glow 3s ease-in-out infinite;
 }
 
-@keyframes summary-pulse {
+.summary-pulse-dot::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 999px;
+  border: 1.5px solid currentColor;
+  opacity: 0;
+  transform: scale(0.62);
+  animation: summary-ring-pulse 3s ease-out infinite;
+}
+
+@keyframes summary-dot-glow {
   0%,
   100% {
-    opacity: 0.78;
-    transform: scale(0.86);
-    box-shadow: 0 0 0 0 rgba(15, 23, 42, 0.12);
+    opacity: 0.72;
+    transform: scale(0.94);
   }
 
-  48% {
+  42% {
     opacity: 1;
-    transform: scale(1);
-    box-shadow: 0 0 0 7px rgba(15, 23, 42, 0);
+    transform: scale(1.12);
+  }
+}
+
+@keyframes summary-ring-pulse {
+  0% {
+    opacity: 0;
+    transform: scale(0.62);
+  }
+
+  18% {
+    opacity: 0.32;
+  }
+
+  62% {
+    opacity: 0;
+    transform: scale(1.22);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.22);
   }
 }
 
