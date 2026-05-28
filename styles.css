@@ -13,6 +13,12 @@ textarea {
   font: inherit;
 }
 
+select,
+input,
+textarea {
+  font-size: 16px;
+}
+
 .thin-scrollbar::-webkit-scrollbar {
   height: 8px;
   width: 8px;
@@ -30,11 +36,37 @@ textarea {
   border-radius: 999px;
 }
 
+.summary-pulse-dot {
+  display: inline-block;
+  height: 10px;
+  width: 10px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 0 currentColor;
+  animation: summary-pulse 2.8s ease-in-out infinite;
+}
+
+@keyframes summary-pulse {
+  0%,
+  100% {
+    opacity: 0.78;
+    transform: scale(0.86);
+    box-shadow: 0 0 0 0 rgba(15, 23, 42, 0.12);
+  }
+
+  48% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 0 7px rgba(15, 23, 42, 0);
+  }
+}
+
 .input {
   width: 100%;
   border: 1px solid #cbd5e1;
   border-radius: 0.375rem;
   background: #fff;
+  min-height: 44px;
   padding: 0.625rem 0.75rem;
   color: #17202a;
   outline: none;
