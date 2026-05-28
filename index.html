@@ -128,12 +128,11 @@ const postToWebhook = async (webAppUrl, body) => {
 
   const response = await fetch(webAppUrl, {
     method: "POST",
-    mode: "cors",
+    mode: "no-cors",
     headers: { "Content-Type": "text/plain;charset=utf-8" },
     body: JSON.stringify(body),
   });
 
-  if (!response.ok) throw new Error(`Sync failed with HTTP ${response.status}`);
   return response;
 };
 
@@ -322,6 +321,16 @@ function App() {
     notify("Custom location deleted.");
   };
 
+  const updateLogLocation = (id, nextLocation) => {
+    const nextLogs = logs.map((log) => (
+      log.id === id
+        ? { ...log, location: nextLocation, syncStatus: log.syncStatus === "Synced" ? "Pending Sync" : log.syncStatus }
+        : log
+    ));
+    saveLogs(nextLogs);
+    notify("Log location updated locally.");
+  };
+
   const syncPending = async () => {
     let nextLogs = [...logs];
     let nextLocations = [...locations];
@@ -367,7 +376,7 @@ function App() {
     return () => window.clearInterval(timer);
   }, [logs, locations, settings]);
 
-  const pageProps = { logs, locations, settings, saveSettings, addWorkLog, addLocation, setPage, updateCustomLocation, deleteCustomLocation, syncPending, notify };
+  const pageProps = { logs, locations, settings, saveSettings, addWorkLog, addLocation, setPage, updateLogLocation, updateCustomLocation, deleteCustomLocation, syncPending, notify };
 
   return (
     <div className="min-h-screen bg-[#f6f8fb] lg:flex">
@@ -627,7 +636,7 @@ function CalendarView({ logs, locations }) {
   );
 }
 
-function TimelineView({ logs, locations }) {
+function TimelineView({ logs, locations, updateLogLocation }) {
   const [month, setMonth] = useState(todayIso().slice(0, 7));
   const [location, setLocation] = useState("All");
   const filtered = sortLogsByDateDesc(logs).filter((log) => monthKey(log.workDate) === month && (location === "All" || log.location === location));
@@ -652,7 +661,7 @@ function TimelineView({ logs, locations }) {
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <LocationTag name={log.location} locations={locations} />
+                <EditableLocationSelect value={log.location} locations={locations} onChange={(nextLocation) => updateLogLocation(log.id, nextLocation)} />
                 <span className="text-sm font-semibold text-slate-500">{log.startTime} - {log.endTime}</span>
               </div>
               <p className="mt-2 text-sm text-slate-700">{log.note || "No note"}</p>
@@ -668,7 +677,7 @@ function TimelineView({ logs, locations }) {
   );
 }
 
-function AttendanceReview({ logs, locations }) {
+function AttendanceReview({ logs, locations, updateLogLocation }) {
   const sortedLogs = sortLogsByDateDesc(logs);
   const rows = [["Timestamp Created", "Work Date", "Start Time", "End Time", "Location", "Note", "Sync Status"], ...sortedLogs.map((log) => [log.createdAt, log.workDate, log.startTime, log.endTime, log.location, log.note, log.syncStatus])];
   return (
@@ -689,7 +698,7 @@ function AttendanceReview({ logs, locations }) {
                 <td className="px-3 py-3 font-semibold">{log.workDate}</td>
                 <td className="px-3 py-3">{log.startTime}</td>
                 <td className="px-3 py-3">{log.endTime}</td>
-                <td className="px-3 py-3"><LocationTag name={log.location} locations={locations} /></td>
+                <td className="px-3 py-3"><EditableLocationSelect value={log.location} locations={locations} onChange={(nextLocation) => updateLogLocation(log.id, nextLocation)} compact /></td>
                 <td className="px-3 py-3">{log.note}</td>
                 <td className="px-3 py-3"><StatusBadge status={log.syncStatus} /></td>
               </tr>
@@ -899,6 +908,23 @@ function LocationTag({ name, locations, small = false }) {
   );
 }
 
+function EditableLocationSelect({ value, locations, onChange, compact = false }) {
+  const location = findLocation(locations, value);
+  const soft = softenColor(location?.color || "#4f8f7a");
+
+  return (
+    <select
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className={`max-w-full rounded-md border font-bold outline-none transition focus:ring-2 focus:ring-emerald-100 ${compact ? "w-44 px-2 py-1 text-xs" : "w-full px-2.5 py-1.5 text-xs sm:w-56"}`}
+      style={{ backgroundColor: soft.bg, borderColor: soft.border, color: soft.text }}
+      title="Edit log location"
+    >
+      {locations.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
+    </select>
+  );
+}
+
 function StatusBadge({ status }) {
   const synced = status === "Synced";
   return (
@@ -993,6 +1019,6 @@ function shortLocationName(name) {
 
 createRoot(document.getElementById("root")).render(<App />);
 
-</script>
+    </script>
   </body>
 </html>
