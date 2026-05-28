@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from "https://esm.sh/react@18.3.1";
 import { createRoot } from "https://esm.sh/react-dom@18.3.1/client";
-import { END_TIME, GOOGLE_APPS_SCRIPT_WEB_APP_URL, GOOGLE_SHEET_URL, START_TIME } from "/src/data.js";
-import { storage } from "/src/storage.js";
-import { syncLocation, syncWorkLog } from "/src/sync.js";
-import { downloadCsv, formatDate, monthKey, todayIso, uid } from "/src/utils.js";
+import { END_TIME, GOOGLE_APPS_SCRIPT_WEB_APP_URL, GOOGLE_SHEET_URL, START_TIME } from "./src/data.js";
+import { storage } from "./src/storage.js";
+import { syncLocation, syncWorkLog } from "./src/sync.js";
+import { downloadCsv, formatDate, monthKey, todayIso, uid } from "./src/utils.js";
 
 storage.init();
 
