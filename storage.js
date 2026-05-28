@@ -2,6 +2,7 @@ import { GOOGLE_APPS_SCRIPT_WEB_APP_URL, GOOGLE_SHEET_URL, presetLocations, samp
 
 const LOG_KEY = "fieldlog.workLogs";
 const LOCATION_KEY = "fieldlog.locations";
+const TODO_KEY = "fieldlog.todos";
 const SETTINGS_KEY = "fieldlog.settings";
 const RESET_VERSION_KEY = "fieldlog.resetVersion";
 const CURRENT_RESET_VERSION = "blank-worklogs-v1";
@@ -28,10 +29,10 @@ export const storage = {
     } else if (!savedLogs) {
       writeJson(LOG_KEY, sampleLogs);
     } else {
-      writeJson(LOG_KEY, savedLogs.map(({ photoReference, ...log }) => ({
+      writeJson(LOG_KEY, dedupeLogsByDate(savedLogs.map(({ photoReference, ...log }) => ({
         ...log,
         note: typeof log.note === "string" ? log.note.replace(" Pending confirmation photo.", " pending confirmation.").replace("Pending confirmation photo.", "Pending confirmation.") : log.note,
-      })));
+      }))));
     }
     const savedLocations = readJson(LOCATION_KEY, null);
     if (!savedLocations) {
@@ -40,6 +41,7 @@ export const storage = {
       const customLocations = savedLocations.filter((location) => location.source === "Custom");
       writeJson(LOCATION_KEY, [...presetLocations, ...customLocations]);
     }
+    if (!localStorage.getItem(TODO_KEY)) writeJson(TODO_KEY, []);
     const settings = readJson(SETTINGS_KEY, null);
     writeJson(SETTINGS_KEY, {
       ...defaultSettings,
@@ -53,6 +55,19 @@ export const storage = {
   saveLogs: (logs) => writeJson(LOG_KEY, logs),
   getLocations: () => readJson(LOCATION_KEY, presetLocations),
   saveLocations: (locations) => writeJson(LOCATION_KEY, locations),
+  getTodos: () => readJson(TODO_KEY, []),
+  saveTodos: (todos) => writeJson(TODO_KEY, todos),
   getSettings: () => readJson(SETTINGS_KEY, defaultSettings),
   saveSettings: (settings) => writeJson(SETTINGS_KEY, settings),
 };
+
+function dedupeLogsByDate(logs) {
+  const byDate = new Map();
+  for (const log of logs) {
+    const current = byDate.get(log.workDate);
+    const currentTime = current ? new Date(current.updatedAt || current.createdAt || 0).getTime() : -1;
+    const nextTime = new Date(log.updatedAt || log.createdAt || 0).getTime();
+    if (!current || nextTime >= currentTime) byDate.set(log.workDate, log);
+  }
+  return Array.from(byDate.values()).sort((a, b) => new Date(`${b.workDate}T00:00:00`) - new Date(`${a.workDate}T00:00:00`));
+}

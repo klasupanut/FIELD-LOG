@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useState } from "https://esm.sh/react@18.3.1";
+﻿import React, { useEffect, useMemo, useState } from "https://esm.sh/react@18.3.1";
 import { createRoot } from "https://esm.sh/react-dom@18.3.1/client";
 import { END_TIME, GOOGLE_APPS_SCRIPT_WEB_APP_URL, GOOGLE_SHEET_URL, START_TIME } from "./src/data.js";
 import { storage } from "./src/storage.js";
-import { syncLocation, syncWorkLog } from "./src/sync.js";
-import { downloadCsv, formatDate, monthKey, todayIso, uid } from "./src/utils.js";
+import { syncLocation, syncTodo, syncWorkLog } from "./src/sync.js";
+import { formatDate, monthKey, todayIso, uid } from "./src/utils.js";
 
 storage.init();
 
@@ -12,7 +12,7 @@ const navItems = [
   ["add-log", "Add Log"],
   ["calendar", "Calendar"],
   ["timeline", "Timeline"],
-  ["review", "Review"],
+  ["review", "Memo"],
   ["locations", "Locations"],
   ["integration", "Integration"],
 ];
@@ -21,6 +21,7 @@ function App() {
   const [page, setPage] = useState("dashboard");
   const [logs, setLogs] = useState(storage.getLogs());
   const [locations, setLocations] = useState(storage.getLocations());
+  const [todos, setTodos] = useState(storage.getTodos());
   const [settings, setSettings] = useState(storage.getSettings());
   const [toast, setToast] = useState("");
   const [lastAutoRefresh, setLastAutoRefresh] = useState("");
@@ -33,6 +34,11 @@ function App() {
   const saveLocations = (next) => {
     setLocations(next);
     storage.saveLocations(next);
+  };
+
+  const saveTodos = (next) => {
+    setTodos(next);
+    storage.saveTodos(next);
   };
 
   const saveSettings = (next) => {
@@ -49,14 +55,17 @@ function App() {
   const refreshFromLocal = () => {
     setLogs(storage.getLogs());
     setLocations(storage.getLocations());
+    setTodos(storage.getTodos());
     setSettings(storage.getSettings());
     setLastAutoRefresh(new Date().toISOString());
   };
 
   const addWorkLog = async (draft) => {
+    const existingLog = logs.find((log) => log.workDate === draft.workDate);
     const pendingLog = {
-      id: uid("log"),
-      createdAt: new Date().toISOString(),
+      id: existingLog?.id || uid("log"),
+      createdAt: existingLog?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       workDate: draft.workDate,
       startTime: START_TIME,
       endTime: END_TIME,
@@ -64,17 +73,20 @@ function App() {
       note: draft.note.trim(),
       syncStatus: "Pending Sync",
     };
-    saveLogs([pendingLog, ...logs]);
+    const nextLogs = existingLog
+      ? logs.map((log) => (log.id === existingLog.id ? pendingLog : log))
+      : [pendingLog, ...logs];
+    saveLogs(nextLogs);
 
     try {
       await syncWorkLog(GOOGLE_APPS_SCRIPT_WEB_APP_URL, pendingLog);
       const synced = { ...pendingLog, syncStatus: "Synced" };
-      saveLogs([synced, ...logs]);
-      saveSettings({ ...settings, lastSyncStatus: "Last work log synced", lastSyncAt: new Date().toISOString() });
-      notify("Work log saved and synced.");
+      saveLogs(nextLogs.map((log) => (log.id === synced.id ? synced : log)));
+      saveSettings({ ...settings, lastSyncStatus: existingLog ? "Work log updated and synced" : "Last work log synced", lastSyncAt: new Date().toISOString() });
+      notify(existingLog ? "Work log updated and synced." : "Work log saved and synced.");
     } catch (error) {
       saveSettings({ ...settings, lastSyncStatus: error.message, lastSyncAt: new Date().toISOString() });
-      notify("Work log saved locally. Sync is pending.");
+      notify(existingLog ? "Work log updated locally. Sync is pending." : "Work log saved locally. Sync is pending.");
     }
   };
 
@@ -113,6 +125,54 @@ function App() {
     notify("Custom location deleted.");
   };
 
+  const updateLogLocation = (id, nextLocation) => {
+    const nextLogs = logs.map((log) => (
+      log.id === id
+        ? { ...log, location: nextLocation, syncStatus: log.syncStatus === "Synced" ? "Pending Sync" : log.syncStatus }
+        : log
+    ));
+    saveLogs(nextLogs);
+    notify("Log location updated locally.");
+  };
+
+  const addTodo = async (draft) => {
+    const pendingTodo = {
+      id: uid("todo"),
+      createdAt: new Date().toISOString(),
+      dueDate: draft.dueDate,
+      task: draft.task.trim(),
+      priority: draft.priority,
+      status: draft.status,
+      note: draft.note.trim(),
+      syncStatus: "Pending Sync",
+    };
+    saveTodos([pendingTodo, ...todos]);
+
+    try {
+      await syncTodo(GOOGLE_APPS_SCRIPT_WEB_APP_URL, pendingTodo);
+      saveTodos([{ ...pendingTodo, syncStatus: "Synced" }, ...todos]);
+      saveSettings({ ...settings, lastSyncStatus: "Last memo synced", lastSyncAt: new Date().toISOString() });
+      notify("Memo saved and synced.");
+    } catch (error) {
+      saveSettings({ ...settings, lastSyncStatus: error.message, lastSyncAt: new Date().toISOString() });
+      notify("Memo saved locally. Sync is pending.");
+    }
+  };
+
+  const updateTodo = (id, patch) => {
+    const nextTodos = todos.map((todo) => (
+      todo.id === id
+        ? { ...todo, ...patch, syncStatus: todo.syncStatus === "Synced" ? "Pending Sync" : todo.syncStatus }
+        : todo
+    ));
+    saveTodos(nextTodos);
+  };
+
+  const deleteTodo = (id) => {
+    saveTodos(todos.filter((todo) => todo.id !== id));
+    notify("Memo deleted locally.");
+  };
+
   const syncPending = async () => {
     let nextLogs = [...logs];
     let nextLocations = [...locations];
@@ -140,8 +200,21 @@ function App() {
       }
     }
 
+    let nextTodos = [...todos];
+    for (const todo of nextTodos.filter((item) => item.syncStatus !== "Synced")) {
+      try {
+        await syncTodo(GOOGLE_APPS_SCRIPT_WEB_APP_URL, todo);
+        nextTodos = nextTodos.map((item) => (item.id === todo.id ? { ...item, syncStatus: "Synced" } : item));
+        syncedCount += 1;
+      } catch (error) {
+        saveSettings({ ...settings, lastSyncStatus: error.message, lastSyncAt: new Date().toISOString() });
+        break;
+      }
+    }
+
     saveLogs(nextLogs);
     saveLocations(nextLocations);
+    saveTodos(nextTodos);
     if (syncedCount) {
       saveSettings({ ...settings, lastSyncStatus: `${syncedCount} pending item(s) synced`, lastSyncAt: new Date().toISOString() });
       notify(`${syncedCount} pending item(s) synced.`);
@@ -156,9 +229,9 @@ function App() {
       if (GOOGLE_APPS_SCRIPT_WEB_APP_URL) syncPending();
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [logs, locations, settings]);
+  }, [logs, locations, todos, settings]);
 
-  const pageProps = { logs, locations, settings, saveSettings, addWorkLog, addLocation, setPage, updateCustomLocation, deleteCustomLocation, syncPending, notify };
+  const pageProps = { logs, locations, todos, settings, saveSettings, addWorkLog, addLocation, addTodo, updateTodo, deleteTodo, setPage, updateLogLocation, updateCustomLocation, deleteCustomLocation, syncPending, notify };
 
   return (
     <div className="min-h-screen bg-[#f6f8fb] lg:flex">
@@ -171,7 +244,7 @@ function App() {
           {page === "add-log" && <AddWorkLog {...pageProps} />}
           {page === "calendar" && <CalendarView {...pageProps} />}
           {page === "timeline" && <TimelineView {...pageProps} />}
-          {page === "review" && <AttendanceReview {...pageProps} />}
+          {page === "review" && <MemoTodos {...pageProps} />}
           {page === "locations" && <LocationSettings {...pageProps} />}
           {page === "integration" && <IntegrationSettings {...pageProps} />}
         </section>
@@ -220,7 +293,7 @@ function Nav({ page, setPage }) {
         <div className="space-y-2">
           {navItems.map(([id, label]) => (
             <button key={id} onClick={() => setPage(id)} className={`flex w-full items-center rounded-md px-4 py-3 text-left text-sm font-bold transition ${page === id ? "bg-emerald-500 text-white shadow-lg shadow-emerald-950/20" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
-              {label === "Add Log" ? "Add Work Log" : label === "Review" ? "Attendance Review" : label === "Integration" ? "Settings" : label}
+              {label === "Add Log" ? "Add Work Log" : label === "Memo" ? "Memo Todo" : label === "Integration" ? "Settings" : label}
             </button>
           ))}
         </div>
@@ -241,7 +314,7 @@ function MobileNav({ page, setPage }) {
     ["add-log", "Add"],
     ["calendar", "Cal"],
     ["timeline", "Line"],
-    ["review", "Review"],
+    ["review", "Memo"],
     ["locations", "Places"],
     ["integration", "Sync"],
   ];
@@ -283,7 +356,7 @@ function Dashboard({ logs, locations, setPage }) {
           <div>
             <h2 className="text-sm font-black">Today&apos;s Status</h2>
             <div className="mt-5 flex items-start gap-3">
-              <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${todayLog ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{todayLog ? "✓" : "!"}</div>
+              <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${todayLog ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{todayLog ? "โ“" : "!"}</div>
               <div>
                 <p className="text-sm text-slate-500">{todayLog ? "You have logged your work today." : "No work log has been saved today."}</p>
                 <p className="mt-1 text-sm font-semibold text-slate-600">{START_TIME} - {END_TIME}</p>
@@ -329,12 +402,18 @@ function Dashboard({ logs, locations, setPage }) {
 function AddWorkLog({ locations, addWorkLog, addLocation }) {
   const [draft, setDraft] = useState({ workDate: todayIso(), location: locations[0]?.name || "", note: "" });
   const [showLocationForm, setShowLocationForm] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const submit = async (event) => {
     event.preventDefault();
-    if (!draft.location) return;
-    await addWorkLog(draft);
-    setDraft({ workDate: todayIso(), location: draft.location, note: "" });
+    if (!draft.location || isSaving) return;
+    setIsSaving(true);
+    try {
+      await addWorkLog(draft);
+      setDraft({ workDate: todayIso(), location: draft.location, note: "" });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -357,7 +436,7 @@ function AddWorkLog({ locations, addWorkLog, addLocation }) {
           <Field label="Work Details / Note" wide><textarea value={draft.note} onChange={(e) => setDraft({ ...draft, note: e.target.value })} className="input min-h-32" placeholder="Short attendance verification note" /></Field>
         </div>
         <div className="mt-6 flex justify-end border-t border-slate-100 pt-4">
-          <button className="w-full rounded-md bg-emerald-500 px-6 py-3 text-sm font-bold text-white transition hover:bg-emerald-600 sm:w-auto">Save Log</button>
+          <button disabled={isSaving} className="w-full rounded-md bg-emerald-500 px-6 py-3 text-sm font-bold text-white transition hover:bg-emerald-600 disabled:cursor-wait disabled:bg-slate-300 sm:w-auto">{isSaving ? "Saving..." : "Save Log"}</button>
         </div>
       </form>
       <aside className="space-y-4">
@@ -418,7 +497,7 @@ function CalendarView({ logs, locations }) {
   );
 }
 
-function TimelineView({ logs, locations }) {
+function TimelineView({ logs, locations, updateLogLocation }) {
   const [month, setMonth] = useState(todayIso().slice(0, 7));
   const [location, setLocation] = useState("All");
   const filtered = sortLogsByDateDesc(logs).filter((log) => monthKey(log.workDate) === month && (location === "All" || log.location === location));
@@ -443,7 +522,7 @@ function TimelineView({ logs, locations }) {
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <LocationTag name={log.location} locations={locations} />
+                <EditableLocationSelect value={log.location} locations={locations} onChange={(nextLocation) => updateLogLocation(log.id, nextLocation)} />
                 <span className="text-sm font-semibold text-slate-500">{log.startTime} - {log.endTime}</span>
               </div>
               <p className="mt-2 text-sm text-slate-700">{log.note || "No note"}</p>
@@ -459,39 +538,85 @@ function TimelineView({ logs, locations }) {
   );
 }
 
-function AttendanceReview({ logs, locations }) {
-  const sortedLogs = sortLogsByDateDesc(logs);
-  const rows = [["Timestamp Created", "Work Date", "Start Time", "End Time", "Location", "Note", "Sync Status"], ...sortedLogs.map((log) => [log.createdAt, log.workDate, log.startTime, log.endTime, log.location, log.note, log.syncStatus])];
+function MemoTodos({ todos, addTodo, updateTodo, deleteTodo }) {
+  const [draft, setDraft] = useState({ dueDate: todayIso(), task: "", priority: "Normal", status: "Open", note: "" });
+  const sortedTodos = sortTodos(todos);
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!draft.task.trim()) return;
+    await addTodo(draft);
+    setDraft({ dueDate: todayIso(), task: "", priority: "Normal", status: "Open", note: "" });
+  };
+
   return (
-    <section className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <PageTitle title="Attendance Review" subtitle="Table format for checking and exporting attendance records." />
-        <button onClick={() => downloadCsv(`fieldlog-${todayIso()}.csv`, rows)} className="rounded-md bg-ink px-4 py-2 text-sm font-bold text-white">Export CSV</button>
-      </div>
-      <div className="thin-scrollbar overflow-x-auto">
-        <table className="w-full min-w-[900px] border-collapse text-left text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-            <tr>{rows[0].map((heading) => <th key={heading} className="border-b border-slate-200 px-3 py-3">{heading}</th>)}</tr>
-          </thead>
-          <tbody>
-            {sortedLogs.map((log) => (
-              <tr key={log.id} className="border-b border-slate-100">
-                <td className="px-3 py-3 text-slate-500">{new Date(log.createdAt).toLocaleString()}</td>
-                <td className="px-3 py-3 font-semibold">{log.workDate}</td>
-                <td className="px-3 py-3">{log.startTime}</td>
-                <td className="px-3 py-3">{log.endTime}</td>
-                <td className="px-3 py-3"><LocationTag name={log.location} locations={locations} /></td>
-                <td className="px-3 py-3">{log.note}</td>
-                <td className="px-3 py-3"><StatusBadge status={log.syncStatus} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
+    <div className="grid gap-4 xl:grid-cols-[380px_1fr]">
+      <form onSubmit={submit} className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
+        <PageTitle title="Memo Todo" subtitle="จดงานที่ต้องทำไว้เตือนความจำระหว่างวัน." />
+        <div className="mt-4 space-y-3">
+          <Field label="Task"><input value={draft.task} onChange={(event) => setDraft({ ...draft, task: event.target.value })} className="input" placeholder="เช่น โทร follow up, ตรวจเอกสาร, เตรียม report" required /></Field>
+          <Field label="Due Date"><input type="date" value={draft.dueDate} onChange={(event) => setDraft({ ...draft, dueDate: event.target.value })} className="input" /></Field>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Priority">
+              <select value={draft.priority} onChange={(event) => setDraft({ ...draft, priority: event.target.value })} className="input">
+                <option>Normal</option>
+                <option>High</option>
+                <option>Low</option>
+              </select>
+            </Field>
+            <Field label="Status">
+              <select value={draft.status} onChange={(event) => setDraft({ ...draft, status: event.target.value })} className="input">
+                <option>Open</option>
+                <option>Doing</option>
+                <option>Done</option>
+              </select>
+            </Field>
+          </div>
+          <Field label="Note"><textarea value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} className="input min-h-28" placeholder="รายละเอียดสั้น ๆ" /></Field>
+        </div>
+        <button className="mt-4 w-full rounded-md bg-emerald-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-emerald-600">Save Memo</button>
+      </form>
+
+      <section className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <PageTitle title="Todo List" subtitle="แก้ status และ priority ได้จากมือถือทันที." />
+          <span className="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">{sortedTodos.length} items</span>
+        </div>
+        <div className="space-y-3">
+          {sortedTodos.map((todo) => (
+            <article key={todo.id} className={`rounded-md border p-3 ${todo.status === "Done" ? "border-emerald-100 bg-emerald-50/60" : "border-slate-200 bg-slate-50"}`}>
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-bold text-slate-500">{formatDate(todo.dueDate)}</span>
+                    <TodoPill value={todo.priority} />
+                    <StatusBadge status={todo.syncStatus} />
+                  </div>
+                  <h3 className={`mt-2 text-base font-black ${todo.status === "Done" ? "text-slate-400 line-through" : "text-ink"}`}>{todo.task}</h3>
+                  {todo.note && <p className="mt-1 text-sm text-slate-600">{todo.note}</p>}
+                </div>
+                <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] lg:w-[360px]">
+                  <select value={todo.status} onChange={(event) => updateTodo(todo.id, { status: event.target.value })} className="input">
+                    <option>Open</option>
+                    <option>Doing</option>
+                    <option>Done</option>
+                  </select>
+                  <select value={todo.priority} onChange={(event) => updateTodo(todo.id, { priority: event.target.value })} className="input">
+                    <option>Normal</option>
+                    <option>High</option>
+                    <option>Low</option>
+                  </select>
+                  <button onClick={() => deleteTodo(todo.id)} className="rounded-md border border-red-200 px-3 py-2 text-sm font-bold text-red-700">Delete</button>
+                </div>
+              </div>
+            </article>
+          ))}
+          {!sortedTodos.length && <EmptyState text="ยังไม่มี memo todo. เพิ่มงานแรกจากฟอร์มด้านซ้ายได้เลย." />}
+        </div>
+      </section>
+    </div>
   );
 }
-
 function LocationSettings({ locations, addLocation, updateCustomLocation, deleteCustomLocation }) {
   return (
     <div className="grid gap-4 xl:grid-cols-[360px_1fr]">
@@ -505,7 +630,7 @@ function LocationSettings({ locations, addLocation, updateCustomLocation, delete
                 <LocationTag name={location.name} locations={locations} />
                 <StatusBadge status={location.syncStatus} />
               </div>
-              <div className="mt-3 text-sm text-slate-500">{location.category || "No category"} · {location.source}</div>
+              <div className="mt-3 text-sm text-slate-500">{location.category || "No category"} ยท {location.source}</div>
               {location.source === "Custom" && (
                 <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
                   <input value={location.category} onChange={(e) => updateCustomLocation(location.id, { category: e.target.value })} className="input" placeholder="Category" />
@@ -534,7 +659,7 @@ function IntegrationSettings({ settings, syncPending }) {
         </div>
         <div className={`rounded-md border p-4 text-sm ${GOOGLE_APPS_SCRIPT_WEB_APP_URL ? "border-emerald-100 bg-emerald-50 text-emerald-900" : "border-amber-100 bg-amber-50 text-amber-900"}`}>
           <div className="font-bold">{GOOGLE_APPS_SCRIPT_WEB_APP_URL ? "Auto sync is active" : "Auto sync is not active yet"}</div>
-          <p className="mt-1">{GOOGLE_APPS_SCRIPT_WEB_APP_URL ? "Save actions will append rows to Google Sheets automatically." : "Pending Sync means the record is saved on this device, but the Google Sheet backend URL has not been deployed in code yet."}</p>
+          <p className="mt-1">{GOOGLE_APPS_SCRIPT_WEB_APP_URL ? "Work logs create or update one Google Sheets row per date automatically." : "Pending Sync means the record is saved on this device, but the Google Sheet backend URL has not been deployed in code yet."}</p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
           <button onClick={syncPending} className="rounded-md bg-field px-4 py-2 text-sm font-bold text-white">Sync Pending</button>
@@ -561,7 +686,7 @@ function RecentLogs({ logs, locations }) {
             <div>
               <div className="text-xs font-semibold text-slate-500">{log.workDate === todayIso() ? "Today" : formatDate(log.workDate)}</div>
               <div className="font-black">{log.location}</div>
-              <div className="text-sm text-slate-500">{log.startTime} - {log.endTime} · {log.note || "No note"}</div>
+              <div className="text-sm text-slate-500">{log.startTime} - {log.endTime} ยท {log.note || "No note"}</div>
             </div>
             <div className="flex items-center gap-2">
               <StatusBadge status={log.syncStatus} />
@@ -618,7 +743,7 @@ function SummaryLine({ label, value, tone }) {
 
   return (
     <div className="flex items-center gap-3">
-      <div className={`grid h-9 w-9 place-items-center rounded-full text-xs font-black ${tones[tone] || tones.emerald}`}>•</div>
+      <div className={`grid h-9 w-9 place-items-center rounded-full text-xs font-black ${tones[tone] || tones.emerald}`}>โ€ข</div>
       <div>
         <div className="text-xs text-slate-500">{label}</div>
         <div className="font-black">{value}</div>
@@ -690,6 +815,23 @@ function LocationTag({ name, locations, small = false }) {
   );
 }
 
+function EditableLocationSelect({ value, locations, onChange, compact = false }) {
+  const location = findLocation(locations, value);
+  const soft = softenColor(location?.color || "#4f8f7a");
+
+  return (
+    <select
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className={`max-w-full rounded-md border font-bold outline-none transition focus:ring-2 focus:ring-emerald-100 ${compact ? "w-44 px-2 py-1 text-xs" : "w-full px-2.5 py-1.5 text-xs sm:w-56"}`}
+      style={{ backgroundColor: soft.bg, borderColor: soft.border, color: soft.text }}
+      title="Edit log location"
+    >
+      {locations.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
+    </select>
+  );
+}
+
 function StatusBadge({ status }) {
   const synced = status === "Synced";
   return (
@@ -698,6 +840,16 @@ function StatusBadge({ status }) {
       {status}
     </span>
   );
+}
+
+function TodoPill({ value }) {
+  const tone = {
+    High: "bg-red-50 text-red-700",
+    Normal: "bg-sky-50 text-sky-700",
+    Low: "bg-slate-100 text-slate-600",
+  }[value] || "bg-slate-100 text-slate-600";
+
+  return <span className={`rounded-md px-2 py-1 text-xs font-bold ${tone}`}>{value}</span>;
 }
 
 function EmptyState({ text }) {
@@ -717,6 +869,18 @@ function sortLogsByDateDesc(items) {
     const dateDiff = new Date(`${b.workDate}T00:00:00`).getTime() - new Date(`${a.workDate}T00:00:00`).getTime();
     if (dateDiff !== 0) return dateDiff;
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+}
+
+function sortTodos(items) {
+  const statusRank = { Open: 0, Doing: 1, Done: 2 };
+  const priorityRank = { High: 0, Normal: 1, Low: 2 };
+  return [...items].sort((a, b) => {
+    const statusDiff = (statusRank[a.status] ?? 9) - (statusRank[b.status] ?? 9);
+    if (statusDiff !== 0) return statusDiff;
+    const dueDiff = new Date(`${a.dueDate}T00:00:00`).getTime() - new Date(`${b.dueDate}T00:00:00`).getTime();
+    if (dueDiff !== 0) return dueDiff;
+    return (priorityRank[a.priority] ?? 9) - (priorityRank[b.priority] ?? 9);
   });
 }
 
@@ -776,10 +940,12 @@ function shortLocationName(name) {
     CHOD5: "CH5",
     CHAENGWATTANA: "CHA",
     HUAHIN: "HH",
-    "บ้านคุณบุญชัย": "BKC",
+    "เธเนเธฒเธเธเธธเธ“เธเธธเธเธเธฑเธข": "BKC",
     Seminar: "SEM",
   };
   return aliases[name] || name.slice(0, 3).toUpperCase();
 }
 
 createRoot(document.getElementById("root")).render(<App />);
+
+

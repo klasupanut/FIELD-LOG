@@ -24,6 +24,18 @@ const SHEETS = {
       "Sync Status",
     ],
   },
+  appendTodo: {
+    name: "Todos",
+    headers: [
+      "Timestamp Created",
+      "Due Date",
+      "Task",
+      "Priority",
+      "Status",
+      "Note",
+      "Sync Status",
+    ],
+  },
 };
 
 function doPost(e) {
@@ -48,11 +60,33 @@ function doPost(e) {
       return payload.row?.[header] ?? "";
     });
 
+    if (payload.action === "appendWorkLog") {
+      const targetRow = findRowByColumnValue(sheet, config.headers, "Work Date", payload.row?.["Work Date"]);
+      if (targetRow) {
+        sheet.getRange(targetRow, 1, 1, row.length).setValues([row]);
+        return jsonResponse({ ok: true, sheet: config.name, mode: "updated", row: targetRow });
+      }
+    }
+
     sheet.appendRow(row);
-    return jsonResponse({ ok: true, sheet: config.name });
+    return jsonResponse({ ok: true, sheet: config.name, mode: "appended" });
   } catch (error) {
     return jsonResponse({ ok: false, error: error.message }, 500);
   }
+}
+
+function findRowByColumnValue(sheet, headers, headerName, value) {
+  if (!value) return null;
+  const columnIndex = headers.indexOf(headerName) + 1;
+  if (!columnIndex) return null;
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+
+  const values = sheet.getRange(2, columnIndex, lastRow - 1, 1).getDisplayValues();
+  const target = String(value).trim();
+  const matchIndex = values.findIndex((row) => String(row[0]).trim() === target);
+  return matchIndex >= 0 ? matchIndex + 2 : null;
 }
 
 function ensureHeaders(sheet, headers) {
