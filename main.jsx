@@ -154,7 +154,7 @@ function App() {
     const timer = window.setInterval(() => {
       refreshFromLocal();
       if (GOOGLE_APPS_SCRIPT_WEB_APP_URL) syncPending();
-    }, 5 * 60 * 1000);
+    }, 1000);
     return () => window.clearInterval(timer);
   }, [logs, locations, settings]);
 
