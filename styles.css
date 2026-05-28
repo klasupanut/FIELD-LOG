@@ -47,6 +47,16 @@ textarea {
   animation: summary-dot-glow 3s ease-in-out infinite;
 }
 
+.summary-pulse-dot::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.18;
+  animation: summary-core-pulse 3s ease-in-out infinite;
+}
+
 .summary-pulse-dot::after {
   content: "";
   position: absolute;
@@ -56,6 +66,19 @@ textarea {
   opacity: 0;
   transform: scale(0.62);
   animation: summary-ring-pulse 3s ease-out infinite;
+}
+
+@keyframes summary-core-pulse {
+  0%,
+  100% {
+    transform: scale(0.8);
+    opacity: 0.12;
+  }
+
+  42% {
+    transform: scale(1.5);
+    opacity: 0.24;
+  }
 }
 
 @keyframes summary-dot-glow {
@@ -89,6 +112,18 @@ textarea {
   100% {
     opacity: 0;
     transform: scale(1.22);
+  }
+}
+
+.calendar-mobile-day.has-log {
+  background: var(--mobile-log-bg, #fff) !important;
+  box-shadow: inset 0 0 0 1px var(--mobile-log-border, transparent);
+}
+
+@media (min-width: 640px) {
+  .calendar-mobile-day.has-log {
+    background: #fff !important;
+    box-shadow: none;
   }
 }
 

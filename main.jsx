@@ -532,8 +532,17 @@ function CalendarView({ logs, locations }) {
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <div key={day} className="bg-slate-50 p-2 text-center text-xs font-bold text-slate-500">{day}</div>)}
         {days.map((day, index) => {
           const dayLogs = day ? logsByDate[day] || [] : [];
+          const firstLogLocation = dayLogs[0] ? findLocation(locations, dayLogs[0].location) : null;
+          const mobileSoft = dayLogs[0] ? softenColor(firstLogLocation?.color || "#4f8f7a") : null;
           return (
-            <div key={`${day}-${index}`} className="min-h-[74px] bg-white p-1.5 sm:min-h-24 sm:p-2">
+            <div
+              key={`${day}-${index}`}
+              className={`calendar-mobile-day min-h-[74px] bg-white p-1.5 sm:min-h-24 sm:p-2 ${dayLogs.length ? "has-log" : ""}`}
+              style={{
+                "--mobile-log-bg": mobileSoft?.bg || "#fff",
+                "--mobile-log-border": mobileSoft?.border || "transparent",
+              }}
+            >
               {day && <div className="mb-2 text-sm font-bold">{Number(day.slice(-2))}</div>}
               <div className="flex min-h-3 flex-wrap gap-1 sm:hidden">
                 {dayLogs.slice(0, 3).map((log) => <LocationDot key={`${log.id}-mobile-dot`} name={log.location} locations={locations} />)}
