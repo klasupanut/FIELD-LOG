@@ -250,13 +250,6 @@ const presetLocations = [{
   source: "Preset",
   syncStatus: "Synced"
 }, {
-  id: "preset-boonchai",
-  name: "เธเนเธฒเธเธเธธเธ“เธเธธเธเธเธฑเธข",
-  category: "Visit",
-  color: "#c47c8c",
-  source: "Preset",
-  syncStatus: "Synced"
-}, {
   id: "preset-seminar",
   name: "Seminar",
   category: "Event",
@@ -755,8 +748,6 @@ function App() {
         lastSyncAt: new Date().toISOString()
       });
       notify(`${syncedCount} pending item(s) synced.`);
-    } else {
-      notify("No pending items were synced.");
     }
   };
   const pullRemoteData = async ({
@@ -873,7 +864,7 @@ function Header({
     className: "flex items-center gap-3"
   }, /*#__PURE__*/React.createElement("div", {
     className: "grid h-11 w-11 place-items-center rounded-md bg-field text-lg font-black text-white"
-  }, "FL"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h1", {
+  }, "OP"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h1", {
     className: "text-xl font-bold tracking-normal"
   }, "FieldLog"), /*#__PURE__*/React.createElement("p", {
     className: "text-xs text-slate-500"
@@ -908,7 +899,7 @@ function Nav({
     className: "flex items-center gap-3 border-b border-white/10 px-6 py-6"
   }, /*#__PURE__*/React.createElement("div", {
     className: "grid h-10 w-10 place-items-center rounded-md bg-emerald-500 text-base font-black"
-  }, "FL"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }, "OP"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "text-xl font-black"
   }, "FieldLog"), /*#__PURE__*/React.createElement("div", {
     className: "text-xs text-slate-400"
@@ -1655,7 +1646,7 @@ function DashboardCalendar({
     const isToday = day === todayIso();
     return /*#__PURE__*/React.createElement("div", {
       key: `${day}-dashboard-${index}`,
-      className: "min-h-14 bg-white p-1.5"
+      className: "group relative min-h-14 bg-white p-1.5"
     }, day && /*#__PURE__*/React.createElement("div", {
       className: `mx-auto grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${isToday ? "bg-emerald-500 text-white" : "text-slate-700"}`
     }, Number(day.slice(-2))), /*#__PURE__*/React.createElement("div", {
@@ -1663,7 +1654,16 @@ function DashboardCalendar({
     }, dayLogs[0] && /*#__PURE__*/React.createElement(LocationDot, {
       name: dayLogs[0].location,
       locations: locations
-    })));
+    })), dayLogs.length > 0 && /*#__PURE__*/React.createElement("div", {
+      className: "pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 min-w-max -translate-x-1/2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 opacity-0 shadow-soft transition group-hover:translate-y-[-2px] group-hover:opacity-100"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "flex items-center gap-2"
+    }, /*#__PURE__*/React.createElement(LocationDot, {
+      name: dayLogs[0].location,
+      locations: locations
+    }), /*#__PURE__*/React.createElement("span", null, dayLogs[0].location)), dayLogs[0].note && /*#__PURE__*/React.createElement("div", {
+      className: "mt-1 max-w-48 truncate text-[11px] font-semibold text-slate-500"
+    }, dayLogs[0].note)));
   })), /*#__PURE__*/React.createElement("div", {
     className: "mt-4 flex flex-wrap gap-2"
   }, locations.slice(0, 6).map(location => /*#__PURE__*/React.createElement(LocationTag, {
@@ -1961,7 +1961,6 @@ function shortLocationName(name) {
     CHOD5: "CH5",
     CHAENGWATTANA: "CHA",
     HUAHIN: "HH",
-    "เน€เธยเน€เธยเน€เธเธ’เน€เธยเน€เธยเน€เธเธเน€เธโ€เน€เธยเน€เธเธเน€เธยเน€เธยเน€เธเธ‘เน€เธเธ": "BKC",
     Seminar: "SEM"
   };
   return aliases[name] || name.slice(0, 3).toUpperCase();
