@@ -286,7 +286,7 @@ function App() {
     <div className="min-h-screen bg-[#f6f8fb] lg:flex">
       <Nav page={page} setPage={setPage} />
       <div className="min-w-0 flex-1 lg:pl-64">
-      <Header settings={settings} pendingCount={logs.filter((item) => item.syncStatus !== "Synced").length + locations.filter((item) => item.source === "Custom" && item.syncStatus !== "Synced").length} syncPending={syncNow} lastAutoRefresh={lastAutoRefresh} />
+      <Header settings={settings} pendingCount={logs.filter((item) => item.syncStatus !== "Synced").length + locations.filter((item) => item.source === "Custom" && item.syncStatus !== "Synced").length + todos.filter((item) => item.syncStatus !== "Synced").length} syncPending={syncNow} lastAutoRefresh={lastAutoRefresh} />
       <main className="mx-auto flex w-full max-w-[1440px] flex-col gap-4 px-4 pb-24 pt-4 sm:px-6 lg:px-8 lg:pb-8 lg:pt-6">
         <section className="min-w-0 flex-1">
           {page === "dashboard" && <Dashboard {...pageProps} />}
@@ -763,10 +763,11 @@ function SheetStructure() {
   return (
     <section className="rounded-md border border-slate-200 bg-white p-4 text-sm shadow-sm">
       <h2 className="mb-2 text-lg font-bold">Google Sheet Tabs</h2>
-      <p className="text-slate-600">WorkLogs and Locations are appended through the automatic sync service.</p>
+      <p className="text-slate-600">WorkLogs, Locations, and Todos are synced through the automatic sync service.</p>
       <div className="mt-3 space-y-2 text-xs text-slate-500">
         <p><strong>WorkLogs:</strong> Timestamp Created, Work Date, Start Time, End Time, Location, Note, Sync Status</p>
         <p><strong>Locations:</strong> Timestamp Created, Location Name, Category, Color, Source, Sync Status</p>
+        <p><strong>Todos:</strong> Timestamp Created, Due Date, Task, Priority, Status, Note, Sync Status</p>
       </div>
     </section>
   );
@@ -777,8 +778,8 @@ function AppsScriptHint() {
     <details className="rounded-md border border-slate-200 p-4 text-sm">
       <summary className="cursor-pointer font-bold">Expected webhook payload</summary>
       <pre className="thin-scrollbar mt-3 overflow-x-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100">{`{
-  "action": "appendWorkLog" | "appendLocation" | "ping",
-  "sheet": "WorkLogs" | "Locations",
+  "action": "appendWorkLog" | "appendLocation" | "appendTodo" | "ping",
+  "sheet": "WorkLogs" | "Locations" | "Todos",
   "row": { "...matching sheet columns": "..." }
 }`}</pre>
     </details>

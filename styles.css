@@ -4,6 +4,10 @@
 
 body {
   min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(45, 212, 191, 0.16), transparent 30rem),
+    linear-gradient(135deg, #07111f 0%, #0d1726 42%, #111827 100%);
+  color: #e5edf6;
 }
 
 button,
@@ -141,4 +145,77 @@ textarea {
 .input:focus {
   border-color: #1f7a5c;
   box-shadow: 0 0 0 3px rgba(31, 122, 92, 0.14);
+}
+
+.bg-\[\#f6f8fb\],
+.bg-cloud {
+  background:
+    radial-gradient(circle at top left, rgba(45, 212, 191, 0.14), transparent 30rem),
+    linear-gradient(135deg, #07111f 0%, #0d1726 42%, #111827 100%) !important;
+}
+
+.bg-white,
+.bg-white\/92,
+.bg-white\/95 {
+  background-color: rgba(15, 23, 42, 0.88) !important;
+}
+
+.bg-slate-50,
+.bg-slate-100 {
+  background-color: rgba(30, 41, 59, 0.7) !important;
+}
+
+.border-slate-100,
+.border-slate-200,
+.border-slate-300 {
+  border-color: rgba(148, 163, 184, 0.22) !important;
+}
+
+section,
+form,
+article,
+details,
+.shadow-sm {
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.24) !important;
+}
+
+section,
+form,
+article {
+  outline: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.text-ink,
+.text-slate-700,
+.text-slate-600 {
+  color: #e5edf6 !important;
+}
+
+.text-slate-500,
+.text-slate-400 {
+  color: #94a3b8 !important;
+}
+
+.input {
+  border-color: rgba(148, 163, 184, 0.26);
+  background: rgba(15, 23, 42, 0.78);
+  color: #f8fafc;
+}
+
+.input::placeholder {
+  color: #64748b;
+}
+
+.input:focus {
+  border-color: #34d399;
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.18);
+}
+
+select.input option {
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+.calendar-mobile-day.has-log {
+  color: #f8fafc;
 }
