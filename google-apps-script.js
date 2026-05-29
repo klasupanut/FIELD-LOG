@@ -1,4 +1,5 @@
 const SPREADSHEET_ID = "13eliZlc2a7XhyzG22Iv1du0KM02LyxyMidO1SDzTI-4";
+const TIME_ZONE = "Asia/Bangkok";
 
 const SHEETS = {
   appendWorkLog: {
@@ -36,6 +37,19 @@ const SHEETS = {
       "Sync Status",
     ],
   },
+  appendProject: {
+    name: "Projects",
+    headers: [
+      "Timestamp Created",
+      "Project Name",
+      "Role",
+      "Start Date",
+      "End Date",
+      "Status",
+      "KPI Note",
+      "Sync Status",
+    ],
+  },
 };
 
 function doPost(e) {
@@ -46,12 +60,35 @@ function doPost(e) {
       return jsonResponse({ ok: true, message: "FieldLog sync service is active" });
     }
 
+    if (payload.action === "deleteTodo") {
+      const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+      setSpreadsheetTimeZone(spreadsheet);
+      const sheet = spreadsheet.getSheetByName(SHEETS.appendTodo.name);
+      if (!sheet) return jsonResponse({ ok: true, sheet: SHEETS.appendTodo.name, mode: "not_found" });
+      ensureHeaders(sheet, SHEETS.appendTodo.headers);
+      const rows = findRowsByColumnValue(sheet, SHEETS.appendTodo.headers, "Timestamp Created", payload.row?.["Timestamp Created"]);
+      rows.sort((a, b) => b - a).forEach((rowNumber) => sheet.deleteRow(rowNumber));
+      return jsonResponse({ ok: true, sheet: SHEETS.appendTodo.name, mode: "deleted", deletedRows: rows.length });
+    }
+
+    if (payload.action === "deleteProject") {
+      const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+      setSpreadsheetTimeZone(spreadsheet);
+      const sheet = spreadsheet.getSheetByName(SHEETS.appendProject.name);
+      if (!sheet) return jsonResponse({ ok: true, sheet: SHEETS.appendProject.name, mode: "not_found" });
+      ensureHeaders(sheet, SHEETS.appendProject.headers);
+      const rows = findRowsByColumnValue(sheet, SHEETS.appendProject.headers, "Timestamp Created", payload.row?.["Timestamp Created"]);
+      rows.sort((a, b) => b - a).forEach((rowNumber) => sheet.deleteRow(rowNumber));
+      return jsonResponse({ ok: true, sheet: SHEETS.appendProject.name, mode: "deleted", deletedRows: rows.length });
+    }
+
     const config = SHEETS[payload.action];
     if (!config) {
       return jsonResponse({ ok: false, error: "Unsupported action" }, 400);
     }
 
     const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+    setSpreadsheetTimeZone(spreadsheet);
     const sheet = spreadsheet.getSheetByName(config.name) || spreadsheet.insertSheet(config.name);
     ensureHeaders(sheet, config.headers);
 
@@ -70,6 +107,11 @@ function doPost(e) {
       return jsonResponse({ ok: true, sheet: config.name, mode: result.mode, row: result.row, deletedDuplicates: result.deletedDuplicates });
     }
 
+    if (payload.action === "appendProject") {
+      const result = upsertUniqueRow(sheet, config.headers, row, "Timestamp Created", payload.row?.["Timestamp Created"]);
+      return jsonResponse({ ok: true, sheet: config.name, mode: result.mode, row: result.row, deletedDuplicates: result.deletedDuplicates });
+    }
+
     sheet.appendRow(row);
     return jsonResponse({ ok: true, sheet: config.name, mode: "appended" });
   } catch (error) {
@@ -84,12 +126,15 @@ function doGet(e) {
     }
 
     const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+    setSpreadsheetTimeZone(spreadsheet);
     cleanupDuplicateRows(spreadsheet, SHEETS.appendWorkLog, "Work Date");
     cleanupDuplicateRows(spreadsheet, SHEETS.appendTodo, "Timestamp Created");
+    cleanupDuplicateRows(spreadsheet, SHEETS.appendProject, "Timestamp Created");
     const data = {
       workLogs: readSheet(spreadsheet, SHEETS.appendWorkLog),
       locations: readSheet(spreadsheet, SHEETS.appendLocation),
       todos: readSheet(spreadsheet, SHEETS.appendTodo),
+      projects: readSheet(spreadsheet, SHEETS.appendProject),
     };
 
     return jsonpResponse(e, { ok: true, data: data });
@@ -112,6 +157,12 @@ function upsertUniqueRow(sheet, headers, row, uniqueHeaderName, uniqueValue) {
   duplicateRows.forEach((rowNumber) => sheet.deleteRow(rowNumber));
 
   return { mode: "updated", row: targetRow, deletedDuplicates: duplicateRows.length };
+}
+
+function setSpreadsheetTimeZone(spreadsheet) {
+  if (spreadsheet.getSpreadsheetTimeZone() !== TIME_ZONE) {
+    spreadsheet.setSpreadsheetTimeZone(TIME_ZONE);
+  }
 }
 
 function cleanupDuplicateRows(spreadsheet, config, uniqueHeaderName) {

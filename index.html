@@ -458,23 +458,27 @@ const fetchRemoteData = webAppUrl => new Promise((resolve, reject) => {
   script.src = `${webAppUrl}${separator}action=export&callback=${callbackName}&_=${Date.now()}`;
   document.head.appendChild(script);
 });
-const todayIso = () => {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000;
+const bangkokDateKey = (date = new Date()) => {
+  const bangkokDate = new Date(date.getTime() + BANGKOK_OFFSET_MS);
+  const year = bangkokDate.getUTCFullYear();
+  const month = String(bangkokDate.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(bangkokDate.getUTCDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 };
+const todayIso = () => bangkokDateKey(new Date());
 const monthKey = dateLike => dateLike.slice(0, 7);
 const formatDate = dateLike => new Intl.DateTimeFormat("en-GB", {
   day: "2-digit",
   month: "short",
-  year: "numeric"
-}).format(new Date(`${dateLike}T00:00:00`));
+  year: "numeric",
+  timeZone: "Asia/Bangkok"
+}).format(new Date(`${dateLike}T00:00:00+07:00`));
 const formatMonth = monthValue => new Intl.DateTimeFormat("en-GB", {
   month: "long",
-  year: "numeric"
-}).format(new Date(`${monthValue}-01T00:00:00`));
+  year: "numeric",
+  timeZone: "Asia/Bangkok"
+}).format(new Date(`${monthValue}-01T00:00:00+07:00`));
 const downloadCsv = (filename, rows) => {
   const csv = rows.map(row => row.map(value => {
     const text = String(value ?? "");
@@ -1363,7 +1367,7 @@ function CalendarView({
 }) {
   const [month, setMonth] = useState(todayIso().slice(0, 7));
   const days = calendarDays(month);
-  const logsByDate = useMemo(() => groupBy(logs, "workDate"), [logs]);
+  const logsByDate = useMemo(() => groupBy(logs.filter(log => monthKey(log.workDate) === month), "workDate"), [logs, month]);
   return /*#__PURE__*/React.createElement("section", {
     className: "rounded-md border border-slate-200 bg-white p-4 shadow-sm"
   }, /*#__PURE__*/React.createElement("div", {
@@ -1449,8 +1453,9 @@ function TimelineView({
     className: "text-2xl font-black leading-none"
   }, Number(log.workDate.slice(-2))), /*#__PURE__*/React.createElement("div", {
     className: "mt-1 text-xs font-bold text-slate-400"
-  }, new Date(`${log.workDate}T00:00:00`).toLocaleDateString("en-GB", {
-    month: "short"
+  }, new Date(`${log.workDate}T00:00:00+07:00`).toLocaleDateString("en-GB", {
+    month: "short",
+    timeZone: "Asia/Bangkok"
   }))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     className: "flex flex-wrap items-center gap-2"
   }, /*#__PURE__*/React.createElement(EditableLocationSelect, {
@@ -2086,7 +2091,7 @@ function DashboardCalendar({
 }) {
   const month = todayIso().slice(0, 7);
   const days = calendarDays(month);
-  const logsByDate = useMemo(() => groupBy(logs, "workDate"), [logs]);
+  const logsByDate = useMemo(() => groupBy(logs.filter(log => monthKey(log.workDate) === month), "workDate"), [logs, month]);
   return /*#__PURE__*/React.createElement("section", {
     className: "rounded-md border border-slate-200 bg-white p-4 shadow-sm"
   }, /*#__PURE__*/React.createElement("h2", {
@@ -2430,9 +2435,15 @@ function normalizeSheetDate(value) {
   const text = String(value).trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
   const match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (match) return `${match[3]}-${match[2].padStart(2, "0")}-${match[1].padStart(2, "0")}`;
+  if (match) {
+    const first = Number(match[1]);
+    const second = Number(match[2]);
+    const day = second > 12 ? second : first;
+    const month = second > 12 ? first : second;
+    return `${match[3]}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
   const date = new Date(text);
-  return Number.isNaN(date.getTime()) ? text : date.toISOString().slice(0, 10);
+  return Number.isNaN(date.getTime()) ? text : bangkokDateKey(date);
 }
 function normalizeSheetTimestamp(value) {
   if (!value) return "";
