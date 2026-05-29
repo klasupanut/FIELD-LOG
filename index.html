@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -32,6 +32,10 @@
 
 body {
   min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(45, 212, 191, 0.16), transparent 30rem),
+    linear-gradient(135deg, #07111f 0%, #0d1726 42%, #111827 100%);
+  color: #e5edf6;
 }
 
 button,
@@ -171,6 +175,79 @@ textarea {
   box-shadow: 0 0 0 3px rgba(31, 122, 92, 0.14);
 }
 
+.bg-\[\#f6f8fb\],
+.bg-cloud {
+  background:
+    radial-gradient(circle at top left, rgba(45, 212, 191, 0.14), transparent 30rem),
+    linear-gradient(135deg, #07111f 0%, #0d1726 42%, #111827 100%) !important;
+}
+
+.bg-white,
+.bg-white\/92,
+.bg-white\/95 {
+  background-color: rgba(15, 23, 42, 0.88) !important;
+}
+
+.bg-slate-50,
+.bg-slate-100 {
+  background-color: rgba(30, 41, 59, 0.7) !important;
+}
+
+.border-slate-100,
+.border-slate-200,
+.border-slate-300 {
+  border-color: rgba(148, 163, 184, 0.22) !important;
+}
+
+section,
+form,
+article,
+details,
+.shadow-sm {
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.24) !important;
+}
+
+section,
+form,
+article {
+  outline: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.text-ink,
+.text-slate-700,
+.text-slate-600 {
+  color: #e5edf6 !important;
+}
+
+.text-slate-500,
+.text-slate-400 {
+  color: #94a3b8 !important;
+}
+
+.input {
+  border-color: rgba(148, 163, 184, 0.26);
+  background: rgba(15, 23, 42, 0.78);
+  color: #f8fafc;
+}
+
+.input::placeholder {
+  color: #64748b;
+}
+
+.input:focus {
+  border-color: #34d399;
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.18);
+}
+
+select.input option {
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+.calendar-mobile-day.has-log {
+  color: #f8fafc;
+}
+
     </style>
   </head>
   <body class="bg-cloud text-ink antialiased">
@@ -196,7 +273,7 @@ const presetLocations = [
   { id: "preset-chaengwattana", name: "CHAENGWATTANA", category: "Site", color: "#c3996b", source: "Preset", syncStatus: "Synced" },
   { id: "preset-huahin", name: "HUAHIN", category: "Travel", color: "#66a59e", source: "Preset", syncStatus: "Synced" },
   { id: "preset-afs", name: "AFS", category: "Partner", color: "#8580c8", source: "Preset", syncStatus: "Synced" },
-  { id: "preset-boonchai", name: "บ้านคุณบุญชัย", category: "Visit", color: "#c47c8c", source: "Preset", syncStatus: "Synced" },
+  { id: "preset-boonchai", name: "เธเนเธฒเธเธเธธเธ“เธเธธเธเธเธฑเธข", category: "Visit", color: "#c47c8c", source: "Preset", syncStatus: "Synced" },
   { id: "preset-seminar", name: "Seminar", category: "Event", color: "#a58ac8", source: "Preset", syncStatus: "Synced" },
 ];
 
@@ -432,7 +509,7 @@ const downloadCsv = (filename, rows) => {
 const uid = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 
-﻿
+๏ปฟ
 storage.init();
 
 const navItems = [
@@ -714,7 +791,7 @@ function App() {
     <div className="min-h-screen bg-[#f6f8fb] lg:flex">
       <Nav page={page} setPage={setPage} />
       <div className="min-w-0 flex-1 lg:pl-64">
-      <Header settings={settings} pendingCount={logs.filter((item) => item.syncStatus !== "Synced").length + locations.filter((item) => item.source === "Custom" && item.syncStatus !== "Synced").length} syncPending={syncNow} lastAutoRefresh={lastAutoRefresh} />
+      <Header settings={settings} pendingCount={logs.filter((item) => item.syncStatus !== "Synced").length + locations.filter((item) => item.source === "Custom" && item.syncStatus !== "Synced").length + todos.filter((item) => item.syncStatus !== "Synced").length} syncPending={syncNow} lastAutoRefresh={lastAutoRefresh} />
       <main className="mx-auto flex w-full max-w-[1440px] flex-col gap-4 px-4 pb-24 pt-4 sm:px-6 lg:px-8 lg:pb-8 lg:pt-6">
         <section className="min-w-0 flex-1">
           {page === "dashboard" && <Dashboard {...pageProps} />}
@@ -1041,9 +1118,9 @@ function MemoTodos({ todos, addTodo, updateTodo, deleteTodo }) {
   return (
     <div className="grid gap-4 xl:grid-cols-[380px_1fr]">
       <form onSubmit={submit} className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
-        <PageTitle title="Memo Todo" subtitle="จดงานที่ต้องทำไว้เตือนความจำระหว่างวัน." />
+        <PageTitle title="Memo Todo" subtitle="เธเธ”เธเธฒเธเธ—เธตเนเธ•เนเธญเธเธ—เธณเนเธงเนเน€เธ•เธทเธญเธเธเธงเธฒเธกเธเธณเธฃเธฐเธซเธงเนเธฒเธเธงเธฑเธ." />
         <div className="mt-4 space-y-3">
-          <Field label="Task"><input value={draft.task} onChange={(event) => setDraft({ ...draft, task: event.target.value })} className="input" placeholder="เช่น โทร follow up, ตรวจเอกสาร, เตรียม report" required /></Field>
+          <Field label="Task"><input value={draft.task} onChange={(event) => setDraft({ ...draft, task: event.target.value })} className="input" placeholder="เน€เธเนเธ เนเธ—เธฃ follow up, เธ•เธฃเธงเธเน€เธญเธเธชเธฒเธฃ, เน€เธ•เธฃเธตเธขเธก report" required /></Field>
           <Field label="Due Date"><input type="date" value={draft.dueDate} onChange={(event) => setDraft({ ...draft, dueDate: event.target.value })} className="input" /></Field>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Priority">
@@ -1061,14 +1138,14 @@ function MemoTodos({ todos, addTodo, updateTodo, deleteTodo }) {
               </select>
             </Field>
           </div>
-          <Field label="Note"><textarea value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} className="input min-h-28" placeholder="รายละเอียดสั้น ๆ" /></Field>
+          <Field label="Note"><textarea value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} className="input min-h-28" placeholder="เธฃเธฒเธขเธฅเธฐเน€เธญเธตเธขเธ”เธชเธฑเนเธ เน" /></Field>
         </div>
         <button className="mt-4 w-full rounded-md bg-emerald-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-emerald-600">Save Memo</button>
       </form>
 
       <section className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
         <div className="mb-4 flex items-center justify-between gap-3">
-          <PageTitle title="Todo List" subtitle="แก้ status และ priority ได้จากมือถือทันที." />
+          <PageTitle title="Todo List" subtitle="เนเธเน status เนเธฅเธฐ priority เนเธ”เนเธเธฒเธเธกเธทเธญเธ–เธทเธญเธ—เธฑเธเธ—เธต." />
           <span className="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">{sortedTodos.length} items</span>
         </div>
         <div className="space-y-3">
@@ -1100,7 +1177,7 @@ function MemoTodos({ todos, addTodo, updateTodo, deleteTodo }) {
               </div>
             </article>
           ))}
-          {!sortedTodos.length && <EmptyState text="ยังไม่มี memo todo. เพิ่มงานแรกจากฟอร์มด้านซ้ายได้เลย." />}
+          {!sortedTodos.length && <EmptyState text="เธขเธฑเธเนเธกเนเธกเธต memo todo. เน€เธเธดเนเธกเธเธฒเธเนเธฃเธเธเธฒเธเธเธญเธฃเนเธกเธ”เนเธฒเธเธเนเธฒเธขเนเธ”เนเน€เธฅเธข." />}
         </div>
       </section>
     </div>
@@ -1191,10 +1268,11 @@ function SheetStructure() {
   return (
     <section className="rounded-md border border-slate-200 bg-white p-4 text-sm shadow-sm">
       <h2 className="mb-2 text-lg font-bold">Google Sheet Tabs</h2>
-      <p className="text-slate-600">WorkLogs and Locations are appended through the automatic sync service.</p>
+      <p className="text-slate-600">WorkLogs, Locations, and Todos are synced through the automatic sync service.</p>
       <div className="mt-3 space-y-2 text-xs text-slate-500">
         <p><strong>WorkLogs:</strong> Timestamp Created, Work Date, Start Time, End Time, Location, Note, Sync Status</p>
         <p><strong>Locations:</strong> Timestamp Created, Location Name, Category, Color, Source, Sync Status</p>
+        <p><strong>Todos:</strong> Timestamp Created, Due Date, Task, Priority, Status, Note, Sync Status</p>
       </div>
     </section>
   );
@@ -1205,8 +1283,8 @@ function AppsScriptHint() {
     <details className="rounded-md border border-slate-200 p-4 text-sm">
       <summary className="cursor-pointer font-bold">Expected webhook payload</summary>
       <pre className="thin-scrollbar mt-3 overflow-x-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100">{`{
-  "action": "appendWorkLog" | "appendLocation" | "ping",
-  "sheet": "WorkLogs" | "Locations",
+  "action": "appendWorkLog" | "appendLocation" | "appendTodo" | "ping",
+  "sheet": "WorkLogs" | "Locations" | "Todos",
   "row": { "...matching sheet columns": "..." }
 }`}</pre>
     </details>
@@ -1529,7 +1607,7 @@ function shortLocationName(name) {
     CHOD5: "CH5",
     CHAENGWATTANA: "CHA",
     HUAHIN: "HH",
-    "เธเนเธฒเธเธเธธเธ“เธเธธเธเธเธฑเธข": "BKC",
+    "เน€เธยเน€เธยเน€เธเธ’เน€เธยเน€เธยเน€เธเธเน€เธโ€เน€เธยเน€เธเธเน€เธยเน€เธยเน€เธเธ‘เน€เธเธ": "BKC",
     Seminar: "SEM",
   };
   return aliases[name] || name.slice(0, 3).toUpperCase();
