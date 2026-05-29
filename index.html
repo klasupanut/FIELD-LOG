@@ -1034,7 +1034,7 @@ function Nav({
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex items-center gap-3 border-b border-white/10 px-5 py-6"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "grid h-10 w-10 place-items-center rounded-md bg-emerald-500 text-base font-black"
+    className: "grid h-10 w-10 shrink-0 place-items-center rounded-md bg-emerald-500 text-xs font-black"
   }, "OP"), /*#__PURE__*/React.createElement("div", {
     className: "min-w-0 opacity-0 transition-opacity duration-200 group-hover/sidebar:opacity-100"
   }, /*#__PURE__*/React.createElement("div", {
@@ -1072,7 +1072,7 @@ function MobileNav({
   page,
   setPage
 }) {
-  const mobileItems = [["dashboard", "Home"], ["add-log", "Add"], ["calendar", "Cal"], ["timeline", "Line"], ["review", "Memo"], ["projects", "Proj"], ["locations", "Places"], ["integration", "Sync"]];
+  const mobileItems = [["dashboard", "Dashboard"], ["add-log", "Add Work Log"], ["calendar", "Calendar"], ["timeline", "Timeline"], ["review", "Memo Todo"], ["projects", "Projects on hand"], ["locations", "Locations"], ["integration", "Settings"]];
   return /*#__PURE__*/React.createElement("nav", {
     className: "fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden"
   }, /*#__PURE__*/React.createElement("div", {
@@ -1080,8 +1080,12 @@ function MobileNav({
   }, mobileItems.map(([id, label]) => /*#__PURE__*/React.createElement("button", {
     key: id,
     onClick: () => setPage(id),
-    className: `min-h-11 rounded-md px-1 text-[11px] font-bold transition ${page === id ? "bg-ink text-white" : "text-slate-500 hover:bg-slate-100"}`
-  }, label))));
+    title: label,
+    "aria-label": label,
+    className: `grid min-h-11 place-items-center rounded-md px-1 text-[11px] font-black transition ${page === id ? "bg-ink text-white" : "text-slate-500 hover:bg-slate-100"}`
+  }, /*#__PURE__*/React.createElement("span", {
+    className: `grid h-8 w-8 place-items-center rounded-md ${page === id ? "bg-white/15" : "bg-slate-100"}`
+  }, navIconLabels[id])))));
 }
 function Dashboard({
   logs,
