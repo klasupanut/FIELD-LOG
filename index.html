@@ -630,13 +630,36 @@ function App() {
       notify("Memo saved locally. Sync is pending.");
     }
   };
-  const updateTodo = (id, patch) => {
-    const nextTodos = todos.map(todo => todo.id === id ? {
-      ...todo,
+  const updateTodo = async (id, patch) => {
+    const targetTodo = todos.find(todo => todo.id === id);
+    if (!targetTodo) return;
+    const updatedTodo = {
+      ...targetTodo,
       ...patch,
-      syncStatus: todo.syncStatus === "Synced" ? "Pending Sync" : todo.syncStatus
-    } : todo);
+      syncStatus: "Pending Sync"
+    };
+    const nextTodos = todos.map(todo => todo.id === id ? updatedTodo : todo);
     saveTodos(nextTodos);
+    try {
+      await syncTodo(GOOGLE_APPS_SCRIPT_WEB_APP_URL, updatedTodo);
+      saveTodos(nextTodos.map(todo => todo.id === id ? {
+        ...updatedTodo,
+        syncStatus: "Synced"
+      } : todo));
+      saveSettings({
+        ...storage.getSettings(),
+        lastSyncStatus: "Memo updated and synced",
+        lastSyncAt: new Date().toISOString()
+      });
+      notify("Memo updated and synced.");
+    } catch (error) {
+      saveSettings({
+        ...storage.getSettings(),
+        lastSyncStatus: error.message,
+        lastSyncAt: new Date().toISOString()
+      });
+      notify("Memo updated locally. Sync is pending.");
+    }
   };
   const deleteTodo = id => {
     saveTodos(todos.filter(todo => todo.id !== id));
