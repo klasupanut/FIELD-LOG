@@ -267,6 +267,7 @@ const sampleLogs = [];
 const LOG_KEY = "fieldlog.workLogs";
 const LOCATION_KEY = "fieldlog.locations";
 const TODO_KEY = "fieldlog.todos";
+const PROJECT_KEY = "fieldlog.projects";
 const SETTINGS_KEY = "fieldlog.settings";
 const RESET_VERSION_KEY = "fieldlog.resetVersion";
 const CURRENT_RESET_VERSION = "blank-worklogs-v1";
@@ -311,6 +312,7 @@ const storage = {
       writeJson(LOCATION_KEY, [...presetLocations, ...customLocations]);
     }
     if (!localStorage.getItem(TODO_KEY)) writeJson(TODO_KEY, []);
+    if (!localStorage.getItem(PROJECT_KEY)) writeJson(PROJECT_KEY, []);
     const settings = readJson(SETTINGS_KEY, null);
     writeJson(SETTINGS_KEY, {
       ...defaultSettings,
@@ -326,6 +328,8 @@ const storage = {
   saveLocations: locations => writeJson(LOCATION_KEY, locations),
   getTodos: () => readJson(TODO_KEY, []),
   saveTodos: todos => writeJson(TODO_KEY, todos),
+  getProjects: () => readJson(PROJECT_KEY, []),
+  saveProjects: projects => writeJson(PROJECT_KEY, projects),
   getSettings: () => readJson(SETTINGS_KEY, defaultSettings),
   saveSettings: settings => writeJson(SETTINGS_KEY, settings)
 };
@@ -394,6 +398,27 @@ const deleteRemoteTodo = (webAppUrl, todo) => postToWebhook(webAppUrl, {
   sheet: "Todos",
   row: {
     "Timestamp Created": todo.createdAt
+  }
+});
+const syncProject = (webAppUrl, project) => postToWebhook(webAppUrl, {
+  action: "appendProject",
+  sheet: "Projects",
+  row: {
+    "Timestamp Created": project.createdAt,
+    "Project Name": project.name,
+    Role: project.role,
+    "Start Date": project.startDate,
+    "End Date": project.endDate,
+    Status: project.status,
+    "KPI Note": project.kpiNote,
+    "Sync Status": "Synced"
+  }
+});
+const deleteRemoteProject = (webAppUrl, project) => postToWebhook(webAppUrl, {
+  action: "deleteProject",
+  sheet: "Projects",
+  row: {
+    "Timestamp Created": project.createdAt
   }
 });
 const testConnection = webAppUrl => postToWebhook(webAppUrl, {
@@ -466,12 +491,13 @@ const downloadCsv = (filename, rows) => {
 };
 const uid = prefix => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 storage.init();
-const navItems = [["dashboard", "Dashboard"], ["add-log", "Add Log"], ["calendar", "Calendar"], ["timeline", "Timeline"], ["review", "Memo"], ["locations", "Locations"], ["integration", "Integration"]];
+const navItems = [["dashboard", "Dashboard"], ["add-log", "Add Log"], ["calendar", "Calendar"], ["timeline", "Timeline"], ["review", "Memo"], ["projects", "Projects"], ["locations", "Locations"], ["integration", "Integration"]];
 function App() {
   const [page, setPage] = useState("dashboard");
   const [logs, setLogs] = useState(storage.getLogs());
   const [locations, setLocations] = useState(storage.getLocations());
   const [todos, setTodos] = useState(storage.getTodos());
+  const [projects, setProjects] = useState(storage.getProjects());
   const [settings, setSettings] = useState(storage.getSettings());
   const [toast, setToast] = useState("");
   const [lastAutoRefresh, setLastAutoRefresh] = useState("");
@@ -489,6 +515,10 @@ function App() {
     setTodos(next);
     storage.saveTodos(next);
   };
+  const saveProjects = next => {
+    setProjects(next);
+    storage.saveProjects(next);
+  };
   const saveSettings = next => {
     setSettings(next);
     storage.saveSettings(next);
@@ -502,6 +532,7 @@ function App() {
     setLogs(storage.getLogs());
     setLocations(storage.getLocations());
     setTodos(storage.getTodos());
+    setProjects(storage.getProjects());
     setSettings(storage.getSettings());
     setLastAutoRefresh(new Date().toISOString());
   };
@@ -682,6 +713,76 @@ function App() {
       notify("Memo deleted locally. Delete sync is pending.");
     }
   };
+  const addProject = async draft => {
+    const project = {
+      id: uid("project"),
+      createdAt: new Date().toISOString(),
+      name: draft.name.trim(),
+      role: draft.role.trim(),
+      startDate: draft.startDate,
+      endDate: draft.endDate,
+      status: draft.status,
+      kpiNote: draft.kpiNote.trim(),
+      syncStatus: "Pending Sync"
+    };
+    saveProjects([project, ...projects]);
+    try {
+      await syncProject(GOOGLE_APPS_SCRIPT_WEB_APP_URL, project);
+      saveProjects([{
+        ...project,
+        syncStatus: "Synced"
+      }, ...projects]);
+      notify("Project added and synced.");
+    } catch (error) {
+      saveSettings({
+        ...storage.getSettings(),
+        lastSyncStatus: error.message,
+        lastSyncAt: new Date().toISOString()
+      });
+      notify("Project added locally. Sync is pending.");
+    }
+  };
+  const updateProject = async (id, patch) => {
+    const target = projects.find(project => project.id === id);
+    if (!target) return;
+    const updated = {
+      ...target,
+      ...patch,
+      syncStatus: "Pending Sync"
+    };
+    const nextProjects = projects.map(project => project.id === id ? updated : project);
+    saveProjects(nextProjects);
+    try {
+      await syncProject(GOOGLE_APPS_SCRIPT_WEB_APP_URL, updated);
+      saveProjects(nextProjects.map(project => project.id === id ? {
+        ...updated,
+        syncStatus: "Synced"
+      } : project));
+      notify("Project updated and synced.");
+    } catch (error) {
+      saveSettings({
+        ...storage.getSettings(),
+        lastSyncStatus: error.message,
+        lastSyncAt: new Date().toISOString()
+      });
+    }
+  };
+  const deleteProject = async id => {
+    const target = projects.find(project => project.id === id);
+    if (!target) return;
+    saveProjects(projects.filter(project => project.id !== id));
+    try {
+      await deleteRemoteProject(GOOGLE_APPS_SCRIPT_WEB_APP_URL, target);
+      notify("Project deleted and synced.");
+    } catch (error) {
+      saveSettings({
+        ...storage.getSettings(),
+        lastSyncStatus: error.message,
+        lastSyncAt: new Date().toISOString()
+      });
+      notify("Project deleted locally. Delete sync is pending.");
+    }
+  };
   const syncPending = async () => {
     let nextLogs = [...logs];
     let nextLocations = [...locations];
@@ -738,9 +839,28 @@ function App() {
         break;
       }
     }
+    let nextProjects = [...projects];
+    for (const project of nextProjects.filter(item => item.syncStatus !== "Synced")) {
+      try {
+        await syncProject(GOOGLE_APPS_SCRIPT_WEB_APP_URL, project);
+        nextProjects = nextProjects.map(item => item.id === project.id ? {
+          ...item,
+          syncStatus: "Synced"
+        } : item);
+        syncedCount += 1;
+      } catch (error) {
+        saveSettings({
+          ...settings,
+          lastSyncStatus: error.message,
+          lastSyncAt: new Date().toISOString()
+        });
+        break;
+      }
+    }
     saveLogs(nextLogs);
     saveLocations(nextLocations);
     saveTodos(nextTodos);
+    saveProjects(nextProjects);
     if (syncedCount) {
       saveSettings({
         ...settings,
@@ -760,9 +880,11 @@ function App() {
       const nextLogs = mergeRemoteLogs(storage.getLogs(), remote.workLogs || []);
       const nextLocations = mergeRemoteLocations(storage.getLocations(), remote.locations || []);
       const nextTodos = mergeRemoteTodos(storage.getTodos(), remote.todos || []);
+      const nextProjects = mergeRemoteProjects(storage.getProjects(), remote.projects || []);
       saveLogs(nextLogs);
       saveLocations(nextLocations);
       saveTodos(nextTodos);
+      saveProjects(nextProjects);
       lastRemotePullRef.current = Date.now();
       saveSettings({
         ...storage.getSettings(),
@@ -813,6 +935,7 @@ function App() {
     logs,
     locations,
     todos,
+    projects,
     settings,
     saveSettings,
     addWorkLog,
@@ -820,6 +943,9 @@ function App() {
     addTodo,
     updateTodo,
     deleteTodo,
+    addProject,
+    updateProject,
+    deleteProject,
     setPage,
     updateLogLocation,
     updateCustomLocation,
@@ -836,14 +962,14 @@ function App() {
     className: "min-w-0 flex-1 lg:pl-64"
   }, /*#__PURE__*/React.createElement(Header, {
     settings: settings,
-    pendingCount: logs.filter(item => item.syncStatus !== "Synced").length + locations.filter(item => item.source === "Custom" && item.syncStatus !== "Synced").length + todos.filter(item => item.syncStatus !== "Synced").length,
+    pendingCount: logs.filter(item => item.syncStatus !== "Synced").length + locations.filter(item => item.source === "Custom" && item.syncStatus !== "Synced").length + todos.filter(item => item.syncStatus !== "Synced").length + projects.filter(item => item.syncStatus !== "Synced").length,
     syncPending: syncNow,
     lastAutoRefresh: lastAutoRefresh
   }), /*#__PURE__*/React.createElement("main", {
     className: "mx-auto flex w-full max-w-[1440px] flex-col gap-4 px-4 pb-24 pt-4 sm:px-6 lg:px-8 lg:pb-8 lg:pt-6"
   }, /*#__PURE__*/React.createElement("section", {
     className: "min-w-0 flex-1"
-  }, page === "dashboard" && /*#__PURE__*/React.createElement(Dashboard, pageProps), page === "add-log" && /*#__PURE__*/React.createElement(AddWorkLog, pageProps), page === "calendar" && /*#__PURE__*/React.createElement(CalendarView, pageProps), page === "timeline" && /*#__PURE__*/React.createElement(TimelineView, pageProps), page === "review" && /*#__PURE__*/React.createElement(MemoTodos, pageProps), page === "locations" && /*#__PURE__*/React.createElement(LocationSettings, pageProps), page === "integration" && /*#__PURE__*/React.createElement(IntegrationSettings, pageProps)))), /*#__PURE__*/React.createElement(MobileNav, {
+  }, page === "dashboard" && /*#__PURE__*/React.createElement(Dashboard, pageProps), page === "add-log" && /*#__PURE__*/React.createElement(AddWorkLog, pageProps), page === "calendar" && /*#__PURE__*/React.createElement(CalendarView, pageProps), page === "timeline" && /*#__PURE__*/React.createElement(TimelineView, pageProps), page === "review" && /*#__PURE__*/React.createElement(MemoTodos, pageProps), page === "projects" && /*#__PURE__*/React.createElement(ProjectsOnHand, pageProps), page === "locations" && /*#__PURE__*/React.createElement(LocationSettings, pageProps), page === "integration" && /*#__PURE__*/React.createElement(IntegrationSettings, pageProps)))), /*#__PURE__*/React.createElement(MobileNav, {
     page: page,
     setPage: setPage
   }), toast && /*#__PURE__*/React.createElement("div", {
@@ -911,7 +1037,7 @@ function Nav({
     key: id,
     onClick: () => setPage(id),
     className: `flex w-full items-center rounded-md px-4 py-3 text-left text-sm font-bold transition ${page === id ? "bg-emerald-500 text-white shadow-lg shadow-emerald-950/20" : "text-slate-300 hover:bg-white/10 hover:text-white"}`
-  }, label === "Add Log" ? "Add Work Log" : label === "Memo" ? "Memo Todo" : label === "Integration" ? "Settings" : label)))), /*#__PURE__*/React.createElement("div", {
+  }, label === "Add Log" ? "Add Work Log" : label === "Memo" ? "Memo Todo" : label === "Projects" ? "Projects on hand" : label === "Integration" ? "Settings" : label)))), /*#__PURE__*/React.createElement("div", {
     className: "border-t border-white/10 p-4"
   }, /*#__PURE__*/React.createElement("div", {
     className: "rounded-md bg-white/10 p-3"
@@ -925,11 +1051,11 @@ function MobileNav({
   page,
   setPage
 }) {
-  const mobileItems = [["dashboard", "Home"], ["add-log", "Add"], ["calendar", "Cal"], ["timeline", "Line"], ["review", "Memo"], ["locations", "Places"], ["integration", "Sync"]];
+  const mobileItems = [["dashboard", "Home"], ["add-log", "Add"], ["calendar", "Cal"], ["timeline", "Line"], ["review", "Memo"], ["projects", "Proj"], ["locations", "Places"], ["integration", "Sync"]];
   return /*#__PURE__*/React.createElement("nav", {
     className: "fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200 bg-white/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "grid grid-cols-7 gap-1"
+    className: "grid grid-cols-8 gap-1"
   }, mobileItems.map(([id, label]) => /*#__PURE__*/React.createElement("button", {
     key: id,
     onClick: () => setPage(id),
@@ -986,7 +1112,7 @@ function Dashboard({
   }, todayLog ? todayLog.note || "Saved" : "Ready to add today&apos;s record."))), /*#__PURE__*/React.createElement("button", {
     onClick: () => setPage("add-log"),
     className: "mt-5 w-full rounded-md border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-emerald-300 hover:text-emerald-700"
-  }, "View Today's Log")), /*#__PURE__*/React.createElement("section", {
+  }, "Add Work Log")), /*#__PURE__*/React.createElement("section", {
     className: "rounded-md border border-slate-200 bg-white p-4 shadow-sm"
   }, /*#__PURE__*/React.createElement("h2", {
     className: "text-sm font-black"
@@ -1025,8 +1151,8 @@ function Dashboard({
   }, /*#__PURE__*/React.createElement(DashboardCalendar, {
     logs: sortedLogs,
     locations: locations
-  }), /*#__PURE__*/React.createElement(RecentLogs, {
-    logs: sortedLogs.slice(0, 6),
+  }), /*#__PURE__*/React.createElement(WorkLogHeatmap, {
+    logs: sortedLogs,
     locations: locations
   })));
 }
@@ -1444,6 +1570,181 @@ function MemoTodos({
     text: "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35 memo todo. \u0E40\u0E1E\u0E34\u0E48\u0E21\u0E07\u0E32\u0E19\u0E41\u0E23\u0E01\u0E08\u0E32\u0E01\u0E1F\u0E2D\u0E23\u0E4C\u0E21\u0E14\u0E49\u0E32\u0E19\u0E0B\u0E49\u0E32\u0E22\u0E44\u0E14\u0E49\u0E40\u0E25\u0E22."
   }))));
 }
+function ProjectsOnHand({
+  projects,
+  addProject,
+  updateProject,
+  deleteProject
+}) {
+  const [draft, setDraft] = useState({
+    name: "",
+    role: "Owner",
+    startDate: `${todayIso().slice(0, 4)}-01-01`,
+    endDate: `${todayIso().slice(0, 4)}-12-31`,
+    status: "Active",
+    kpiNote: ""
+  });
+  const [year, setYear] = useState(todayIso().slice(0, 4));
+  const sortedProjects = sortProjects(projects).filter(project => projectOverlapsYear(project, year));
+  const submit = event => {
+    event.preventDefault();
+    if (!draft.name.trim()) return;
+    addProject(draft);
+    setDraft({
+      ...draft,
+      name: "",
+      kpiNote: ""
+    });
+  };
+  return /*#__PURE__*/React.createElement("div", {
+    className: "grid gap-4 xl:grid-cols-[380px_1fr]"
+  }, /*#__PURE__*/React.createElement("form", {
+    onSubmit: submit,
+    className: "rounded-md border border-slate-200 bg-white p-4 shadow-sm"
+  }, /*#__PURE__*/React.createElement(PageTitle, {
+    title: "Projects on hand",
+    subtitle: "\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E42\u0E1B\u0E23\u0E40\u0E08\u0E01\u0E15\u0E4C\u0E17\u0E35\u0E48\u0E14\u0E39\u0E41\u0E25\u0E44\u0E27\u0E49\u0E43\u0E0A\u0E49\u0E1B\u0E23\u0E30\u0E40\u0E21\u0E34\u0E19 KPI \u0E1B\u0E25\u0E32\u0E22\u0E1B\u0E35."
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "mt-4 space-y-3"
+  }, /*#__PURE__*/React.createElement(Field, {
+    label: "Project Name"
+  }, /*#__PURE__*/React.createElement("input", {
+    value: draft.name,
+    onChange: event => setDraft({
+      ...draft,
+      name: event.target.value
+    }),
+    className: "input",
+    placeholder: "\u0E40\u0E0A\u0E48\u0E19 Data Center Expansion",
+    required: true
+  })), /*#__PURE__*/React.createElement(Field, {
+    label: "Role"
+  }, /*#__PURE__*/React.createElement("input", {
+    value: draft.role,
+    onChange: event => setDraft({
+      ...draft,
+      role: event.target.value
+    }),
+    className: "input",
+    placeholder: "Owner / Support / Coordinator"
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "grid gap-3 sm:grid-cols-2"
+  }, /*#__PURE__*/React.createElement(Field, {
+    label: "Start Date"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    value: draft.startDate,
+    onChange: event => setDraft({
+      ...draft,
+      startDate: event.target.value
+    }),
+    className: "input"
+  })), /*#__PURE__*/React.createElement(Field, {
+    label: "End Date"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    value: draft.endDate,
+    onChange: event => setDraft({
+      ...draft,
+      endDate: event.target.value
+    }),
+    className: "input"
+  }))), /*#__PURE__*/React.createElement(Field, {
+    label: "Status"
+  }, /*#__PURE__*/React.createElement("select", {
+    value: draft.status,
+    onChange: event => setDraft({
+      ...draft,
+      status: event.target.value
+    }),
+    className: "input"
+  }, /*#__PURE__*/React.createElement("option", null, "Active"), /*#__PURE__*/React.createElement("option", null, "Planning"), /*#__PURE__*/React.createElement("option", null, "On Hold"), /*#__PURE__*/React.createElement("option", null, "Completed"))), /*#__PURE__*/React.createElement(Field, {
+    label: "KPI Note"
+  }, /*#__PURE__*/React.createElement("textarea", {
+    value: draft.kpiNote,
+    onChange: event => setDraft({
+      ...draft,
+      kpiNote: event.target.value
+    }),
+    className: "input min-h-28",
+    placeholder: "Impact, responsibility, deliverables, risk, or achievement notes"
+  }))), /*#__PURE__*/React.createElement("button", {
+    className: "mt-4 w-full rounded-md bg-emerald-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-emerald-600"
+  }, "Add Project")), /*#__PURE__*/React.createElement("section", {
+    className: "rounded-md border border-slate-200 bg-white p-4 shadow-sm"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+  }, /*#__PURE__*/React.createElement(PageTitle, {
+    title: "Project Timeline",
+    subtitle: "Timeline \u0E23\u0E32\u0E22\u0E1B\u0E35\u0E02\u0E2D\u0E07\u0E42\u0E1B\u0E23\u0E40\u0E08\u0E01\u0E15\u0E4C\u0E17\u0E35\u0E48\u0E2D\u0E22\u0E39\u0E48\u0E43\u0E19\u0E21\u0E37\u0E2D."
+  }), /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    value: year,
+    onChange: event => setYear(event.target.value),
+    className: "input sm:w-32",
+    min: "2020",
+    max: "2100"
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "space-y-4"
+  }, sortedProjects.map(project => /*#__PURE__*/React.createElement("article", {
+    key: project.id,
+    className: "rounded-md border border-slate-200 bg-slate-50 p-3"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "min-w-0"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex flex-wrap items-center gap-2"
+  }, /*#__PURE__*/React.createElement(StatusPill, {
+    value: project.status
+  }), /*#__PURE__*/React.createElement(StatusBadge, {
+    status: project.syncStatus || "Synced"
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "text-xs font-bold text-slate-500"
+  }, project.role || "Owner"), /*#__PURE__*/React.createElement("span", {
+    className: "text-xs font-bold text-slate-400"
+  }, formatDate(project.startDate), " - ", formatDate(project.endDate))), /*#__PURE__*/React.createElement("h3", {
+    className: "mt-2 text-base font-black text-ink"
+  }, project.name), project.kpiNote && /*#__PURE__*/React.createElement("p", {
+    className: "mt-1 text-sm text-slate-600"
+  }, project.kpiNote)), /*#__PURE__*/React.createElement("button", {
+    onClick: () => deleteProject(project.id),
+    className: "rounded-md border border-red-200 px-3 py-2 text-sm font-bold text-red-700"
+  }, "Delete")), /*#__PURE__*/React.createElement(ProjectTimelineBar, {
+    project: project,
+    year: year
+  }), /*#__PURE__*/React.createElement("div", {
+    className: "mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4"
+  }, /*#__PURE__*/React.createElement("input", {
+    value: project.name,
+    onChange: event => updateProject(project.id, {
+      name: event.target.value
+    }),
+    className: "input"
+  }), /*#__PURE__*/React.createElement("select", {
+    value: project.status,
+    onChange: event => updateProject(project.id, {
+      status: event.target.value
+    }),
+    className: "input"
+  }, /*#__PURE__*/React.createElement("option", null, "Active"), /*#__PURE__*/React.createElement("option", null, "Planning"), /*#__PURE__*/React.createElement("option", null, "On Hold"), /*#__PURE__*/React.createElement("option", null, "Completed")), /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    value: project.startDate,
+    onChange: event => updateProject(project.id, {
+      startDate: event.target.value
+    }),
+    className: "input"
+  }), /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    value: project.endDate,
+    onChange: event => updateProject(project.id, {
+      endDate: event.target.value
+    }),
+    className: "input"
+  })))), !sortedProjects.length && /*#__PURE__*/React.createElement(EmptyState, {
+    text: "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35 projects on hand \u0E2A\u0E33\u0E2B\u0E23\u0E31\u0E1A\u0E1B\u0E35\u0E19\u0E35\u0E49."
+  }))));
+}
 function LocationSettings({
   locations,
   addLocation,
@@ -1564,6 +1865,48 @@ function RecentLogs({
     status: log.syncStatus
   }))))));
 }
+function WorkLogHeatmap({
+  logs,
+  locations
+}) {
+  const month = todayIso().slice(0, 7);
+  const days = calendarDays(month).filter(Boolean);
+  const logsByDate = useMemo(() => groupBy(logs.filter(log => monthKey(log.workDate) === month), "workDate"), [logs, month]);
+  const loggedDays = days.filter(day => logsByDate[day]?.length).length;
+  return /*#__PURE__*/React.createElement("section", {
+    className: "rounded-md border border-slate-200 bg-white p-4 shadow-sm"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "mb-4 flex items-center justify-between gap-3"
+  }, /*#__PURE__*/React.createElement("h2", {
+    className: "text-lg font-bold"
+  }, "Work Log Heat Map"), /*#__PURE__*/React.createElement("span", {
+    className: "rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600"
+  }, loggedDays, " days")), /*#__PURE__*/React.createElement("div", {
+    className: "grid grid-cols-7 gap-2"
+  }, days.map(day => {
+    const log = logsByDate[day]?.[0];
+    const location = log ? findLocation(locations, log.location) : null;
+    const soft = log ? softenColor(location?.color || "#4f8f7a") : null;
+    return /*#__PURE__*/React.createElement("div", {
+      key: `heat-${day}`,
+      title: log ? `${formatDate(day)} - ${log.location}` : formatDate(day),
+      className: "aspect-square rounded-md border text-center text-[11px] font-bold transition hover:-translate-y-0.5 hover:shadow-sm",
+      style: {
+        backgroundColor: soft?.bg || "#f8fafc",
+        borderColor: soft?.border || "#e2e8f0",
+        color: soft?.text || "#94a3b8"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "grid h-full place-items-center"
+    }, Number(day.slice(-2))));
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "mt-4 flex flex-wrap gap-2"
+  }, getTopLocations(logs.filter(log => monthKey(log.workDate) === month)).map(([name]) => /*#__PURE__*/React.createElement(LocationTag, {
+    key: name,
+    name: name,
+    locations: locations
+  }))));
+}
 function SheetStructure() {
   return /*#__PURE__*/React.createElement("section", {
     className: "rounded-md border border-slate-200 bg-white p-4 text-sm shadow-sm"
@@ -1571,9 +1914,9 @@ function SheetStructure() {
     className: "mb-2 text-lg font-bold"
   }, "Google Sheet Tabs"), /*#__PURE__*/React.createElement("p", {
     className: "text-slate-600"
-  }, "WorkLogs, Locations, and Todos are synced through the automatic sync service."), /*#__PURE__*/React.createElement("div", {
+  }, "WorkLogs, Locations, Todos, and Projects are synced through the automatic sync service."), /*#__PURE__*/React.createElement("div", {
     className: "mt-3 space-y-2 text-xs text-slate-500"
-  }, /*#__PURE__*/React.createElement("p", null, /*#__PURE__*/React.createElement("strong", null, "WorkLogs:"), " Timestamp Created, Work Date, Start Time, End Time, Location, Note, Sync Status"), /*#__PURE__*/React.createElement("p", null, /*#__PURE__*/React.createElement("strong", null, "Locations:"), " Timestamp Created, Location Name, Category, Color, Source, Sync Status"), /*#__PURE__*/React.createElement("p", null, /*#__PURE__*/React.createElement("strong", null, "Todos:"), " Timestamp Created, Due Date, Task, Priority, Status, Note, Sync Status")));
+  }, /*#__PURE__*/React.createElement("p", null, /*#__PURE__*/React.createElement("strong", null, "WorkLogs:"), " Timestamp Created, Work Date, Start Time, End Time, Location, Note, Sync Status"), /*#__PURE__*/React.createElement("p", null, /*#__PURE__*/React.createElement("strong", null, "Locations:"), " Timestamp Created, Location Name, Category, Color, Source, Sync Status"), /*#__PURE__*/React.createElement("p", null, /*#__PURE__*/React.createElement("strong", null, "Todos:"), " Timestamp Created, Due Date, Task, Priority, Status, Note, Sync Status"), /*#__PURE__*/React.createElement("p", null, /*#__PURE__*/React.createElement("strong", null, "Projects:"), " Timestamp Created, Project Name, Role, Start Date, End Date, Status, KPI Note, Sync Status")));
 }
 function AppsScriptHint() {
   return /*#__PURE__*/React.createElement("details", {
@@ -1583,8 +1926,8 @@ function AppsScriptHint() {
   }, "Expected webhook payload"), /*#__PURE__*/React.createElement("pre", {
     className: "thin-scrollbar mt-3 overflow-x-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100"
   }, `{
-  "action": "appendWorkLog" | "appendLocation" | "appendTodo" | "ping",
-  "sheet": "WorkLogs" | "Locations" | "Todos",
+  "action": "appendWorkLog" | "appendLocation" | "appendTodo" | "appendProject" | "ping",
+  "sheet": "WorkLogs" | "Locations" | "Todos" | "Projects",
   "row": { "...matching sheet columns": "..." }
 }`));
 }
@@ -1775,6 +2118,42 @@ function TodoPill({
     className: `rounded-md px-2 py-1 text-xs font-bold ${tone}`
   }, value);
 }
+function StatusPill({
+  value
+}) {
+  const tone = {
+    Active: "bg-emerald-50 text-emerald-700",
+    Planning: "bg-sky-50 text-sky-700",
+    "On Hold": "bg-amber-50 text-amber-700",
+    Completed: "bg-slate-100 text-slate-600"
+  }[value] || "bg-slate-100 text-slate-600";
+  return /*#__PURE__*/React.createElement("span", {
+    className: `rounded-md px-2 py-1 text-xs font-bold ${tone}`
+  }, value);
+}
+function ProjectTimelineBar({
+  project,
+  year
+}) {
+  const range = projectTimelineRange(project, year);
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return /*#__PURE__*/React.createElement("div", {
+    className: "mt-4"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "relative h-8 overflow-hidden rounded-md border border-slate-200 bg-white"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "absolute top-1 h-6 rounded-md bg-emerald-400/80 shadow-sm",
+    style: {
+      left: `${range.left}%`,
+      width: `${range.width}%`
+    },
+    title: `${formatDate(project.startDate)} - ${formatDate(project.endDate)}`
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "mt-2 grid grid-cols-12 text-center text-[10px] font-bold text-slate-400"
+  }, months.map(month => /*#__PURE__*/React.createElement("span", {
+    key: month
+  }, month))));
+}
 function EmptyState({
   text
 }) {
@@ -1814,6 +2193,29 @@ function sortTodos(items) {
     if (dueDiff !== 0) return dueDiff;
     return (priorityRank[a.priority] ?? 9) - (priorityRank[b.priority] ?? 9);
   });
+}
+function sortProjects(items) {
+  return [...items].sort((a, b) => new Date(`${a.startDate}T00:00:00`).getTime() - new Date(`${b.startDate}T00:00:00`).getTime());
+}
+function projectOverlapsYear(project, year) {
+  const yearStart = new Date(`${year}-01-01T00:00:00`).getTime();
+  const yearEnd = new Date(`${year}-12-31T23:59:59`).getTime();
+  const start = new Date(`${project.startDate}T00:00:00`).getTime();
+  const end = new Date(`${project.endDate}T23:59:59`).getTime();
+  return start <= yearEnd && end >= yearStart;
+}
+function projectTimelineRange(project, year) {
+  const yearStart = new Date(`${year}-01-01T00:00:00`).getTime();
+  const yearEnd = new Date(`${year}-12-31T23:59:59`).getTime();
+  const start = Math.max(new Date(`${project.startDate}T00:00:00`).getTime(), yearStart);
+  const end = Math.min(new Date(`${project.endDate}T23:59:59`).getTime(), yearEnd);
+  const span = yearEnd - yearStart;
+  const left = Math.max(0, (start - yearStart) / span * 100);
+  const width = Math.max(2, (end - start) / span * 100);
+  return {
+    left,
+    width
+  };
 }
 function mergeRemoteLogs(localLogs, remoteRows) {
   const byDate = new Map(localLogs.map(log => [log.workDate, log]));
@@ -1881,6 +2283,27 @@ function mergeRemoteTodos(localTodos, remoteRows) {
     });
   }
   return sortTodos(Array.from(byKey.values()));
+}
+function mergeRemoteProjects(localProjects, remoteRows) {
+  const byKey = new Map(localProjects.map(project => [project.createdAt, project]));
+  for (const row of remoteRows) {
+    const createdAt = normalizeSheetTimestamp(row["Timestamp Created"]) || new Date().toISOString();
+    if (!createdAt) continue;
+    const local = byKey.get(createdAt);
+    if (local?.syncStatus && local.syncStatus !== "Synced") continue;
+    byKey.set(createdAt, {
+      id: local?.id || `sheet-project-${createdAt}`,
+      createdAt,
+      name: row["Project Name"] || local?.name || "",
+      role: row.Role || local?.role || "Owner",
+      startDate: normalizeSheetDate(row["Start Date"]) || local?.startDate || todayIso(),
+      endDate: normalizeSheetDate(row["End Date"]) || local?.endDate || todayIso(),
+      status: row.Status || local?.status || "Active",
+      kpiNote: row["KPI Note"] || "",
+      syncStatus: "Synced"
+    });
+  }
+  return sortProjects(Array.from(byKey.values()));
 }
 function todoKey(todo) {
   return `${todo.createdAt || ""}|${todo.dueDate || ""}|${todo.task || ""}`;
