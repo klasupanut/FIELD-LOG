@@ -492,6 +492,16 @@ const downloadCsv = (filename, rows) => {
 const uid = prefix => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 storage.init();
 const navItems = [["dashboard", "Dashboard"], ["add-log", "Add Log"], ["calendar", "Calendar"], ["timeline", "Timeline"], ["review", "Memo"], ["projects", "Projects"], ["locations", "Locations"], ["integration", "Integration"]];
+const navIconLabels = {
+  dashboard: "DB",
+  "add-log": "+",
+  calendar: "CA",
+  timeline: "TL",
+  review: "TD",
+  projects: "PJ",
+  locations: "LC",
+  integration: "SY"
+};
 function App() {
   const [page, setPage] = useState("dashboard");
   const [logs, setLogs] = useState(storage.getLogs());
@@ -930,7 +940,7 @@ function App() {
       window.removeEventListener("focus", pullIfDue);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [logs, locations, todos, settings]);
+  }, [logs, locations, todos, projects, settings]);
   const pageProps = {
     logs,
     locations,
@@ -959,7 +969,7 @@ function App() {
     page: page,
     setPage: setPage
   }), /*#__PURE__*/React.createElement("div", {
-    className: "min-w-0 flex-1 lg:pl-64"
+    className: "min-w-0 flex-1 lg:pl-20"
   }, /*#__PURE__*/React.createElement(Header, {
     settings: settings,
     pendingCount: logs.filter(item => item.syncStatus !== "Synced").length + locations.filter(item => item.source === "Custom" && item.syncStatus !== "Synced").length + todos.filter(item => item.syncStatus !== "Synced").length + projects.filter(item => item.syncStatus !== "Synced").length,
@@ -1020,32 +1030,43 @@ function Nav({
   setPage
 }) {
   return /*#__PURE__*/React.createElement("nav", {
-    className: "fixed left-0 top-0 z-40 hidden h-screen w-64 flex-col bg-[#071826] text-white shadow-2xl lg:flex"
+    className: "group/sidebar fixed left-0 top-0 z-40 hidden h-screen w-20 flex-col overflow-hidden bg-[#071826] text-white shadow-2xl transition-[width] duration-300 ease-out hover:w-64 lg:flex"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "flex items-center gap-3 border-b border-white/10 px-6 py-6"
+    className: "flex items-center gap-3 border-b border-white/10 px-5 py-6"
   }, /*#__PURE__*/React.createElement("div", {
     className: "grid h-10 w-10 place-items-center rounded-md bg-emerald-500 text-base font-black"
-  }, "OP"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }, "OP"), /*#__PURE__*/React.createElement("div", {
+    className: "min-w-0 opacity-0 transition-opacity duration-200 group-hover/sidebar:opacity-100"
+  }, /*#__PURE__*/React.createElement("div", {
     className: "text-xl font-black"
   }, "FieldLog"), /*#__PURE__*/React.createElement("div", {
-    className: "text-xs text-slate-400"
+    className: "whitespace-nowrap text-xs text-slate-400"
   }, "Field attendance"))), /*#__PURE__*/React.createElement("div", {
-    className: "flex-1 px-4 py-5"
+    className: "flex-1 px-3 py-5"
   }, /*#__PURE__*/React.createElement("div", {
     className: "space-y-2"
   }, navItems.map(([id, label]) => /*#__PURE__*/React.createElement("button", {
     key: id,
     onClick: () => setPage(id),
-    className: `flex w-full items-center rounded-md px-4 py-3 text-left text-sm font-bold transition ${page === id ? "bg-emerald-500 text-white shadow-lg shadow-emerald-950/20" : "text-slate-300 hover:bg-white/10 hover:text-white"}`
-  }, label === "Add Log" ? "Add Work Log" : label === "Memo" ? "Memo Todo" : label === "Projects" ? "Projects on hand" : label === "Integration" ? "Settings" : label)))), /*#__PURE__*/React.createElement("div", {
+    title: label,
+    className: `flex w-full items-center gap-3 rounded-md px-2 py-3 text-left text-sm font-bold transition ${page === id ? "bg-emerald-500 text-white shadow-lg shadow-emerald-950/20" : "text-slate-300 hover:bg-white/10 hover:text-white"}`
+  }, /*#__PURE__*/React.createElement("span", {
+    className: `grid h-10 w-10 shrink-0 place-items-center rounded-md text-xs font-black ${page === id ? "bg-white/20 text-white" : "bg-white/10 text-slate-200"}`
+  }, navIconLabels[id]), /*#__PURE__*/React.createElement("span", {
+    className: "whitespace-nowrap opacity-0 transition-opacity duration-200 group-hover/sidebar:opacity-100"
+  }, label === "Add Log" ? "Add Work Log" : label === "Memo" ? "Memo Todo" : label === "Projects" ? "Projects on hand" : label === "Integration" ? "Settings" : label))))), /*#__PURE__*/React.createElement("div", {
     className: "border-t border-white/10 p-4"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "rounded-md bg-white/10 p-3"
+    className: "flex items-center gap-3 rounded-md bg-white/10 p-3"
   }, /*#__PURE__*/React.createElement("div", {
-    className: "text-sm font-bold"
+    className: "grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white/10 text-xs font-black"
+  }, "SN"), /*#__PURE__*/React.createElement("div", {
+    className: "min-w-0 opacity-0 transition-opacity duration-200 group-hover/sidebar:opacity-100"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "whitespace-nowrap text-sm font-bold"
   }, "SUPANUT N."), /*#__PURE__*/React.createElement("div", {
-    className: "text-xs text-slate-400"
-  }, "Senior Engineer"))));
+    className: "whitespace-nowrap text-xs text-slate-400 opacity-0 transition-opacity duration-200 group-hover/sidebar:opacity-100"
+  }, "Senior Engineer")))));
 }
 function MobileNav({
   page,
@@ -1065,13 +1086,16 @@ function MobileNav({
 function Dashboard({
   logs,
   locations,
+  projects,
+  todos,
   setPage
 }) {
   const sortedLogs = sortLogsByDateDesc(logs);
   const todayLog = sortedLogs.find(log => log.workDate === todayIso());
   const currentMonth = todayIso().slice(0, 7);
   const monthLogs = sortedLogs.filter(log => monthKey(log.workDate) === currentMonth);
-  const mostVisited = getTopLocations(monthLogs);
+  const currentYear = Number(todayIso().slice(0, 4));
+  const activeProjects = sortProjects(projects).filter(project => project.status !== "Completed" && projectOverlapsYear(project, currentYear)).slice(0, 5);
   return /*#__PURE__*/React.createElement("div", {
     className: "space-y-4"
   }, /*#__PURE__*/React.createElement("div", {
@@ -1132,28 +1156,39 @@ function Dashboard({
     tone: "amber"
   }))), /*#__PURE__*/React.createElement("section", {
     className: "rounded-md border border-slate-200 bg-white p-4 shadow-sm"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "mb-4 flex items-center justify-between gap-3"
   }, /*#__PURE__*/React.createElement("h2", {
-    className: "mb-4 text-sm font-black"
-  }, "Most Visited Locations"), /*#__PURE__*/React.createElement("div", {
+    className: "text-sm font-black"
+  }, "Projects on hand"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setPage("projects"),
+    className: "text-xs font-black text-emerald-700"
+  }, "View all")), /*#__PURE__*/React.createElement("div", {
     className: "space-y-3"
-  }, mostVisited.map(([name, count]) => /*#__PURE__*/React.createElement("div", {
-    key: name,
-    className: "flex items-center justify-between"
-  }, /*#__PURE__*/React.createElement(LocationTag, {
-    name: name,
-    locations: locations
-  }), /*#__PURE__*/React.createElement("span", {
-    className: "text-sm font-semibold text-slate-600"
-  }, count, " days"))), !mostVisited.length && /*#__PURE__*/React.createElement(EmptyState, {
-    text: "No location visits this month."
+  }, activeProjects.map(project => /*#__PURE__*/React.createElement("button", {
+    key: project.id,
+    onClick: () => setPage("projects"),
+    className: "w-full rounded-md border border-slate-100 bg-slate-50 p-3 text-left transition hover:border-emerald-200 hover:bg-emerald-50/40"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-start justify-between gap-3"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "min-w-0"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "truncate text-sm font-black text-ink"
+  }, project.name), /*#__PURE__*/React.createElement("div", {
+    className: "mt-1 text-xs font-semibold text-slate-500"
+  }, formatDate(project.startDate), " - ", formatDate(project.endDate))), /*#__PURE__*/React.createElement(StatusPill, {
+    value: project.status
+  })))), !activeProjects.length && /*#__PURE__*/React.createElement(EmptyState, {
+    text: "No active projects on hand this year."
   })))), /*#__PURE__*/React.createElement("div", {
     className: "grid gap-4 xl:grid-cols-[1fr_1fr]"
   }, /*#__PURE__*/React.createElement(DashboardCalendar, {
     logs: sortedLogs,
     locations: locations
-  }), /*#__PURE__*/React.createElement(WorkLogHeatmap, {
-    logs: sortedLogs,
-    locations: locations
+  }), /*#__PURE__*/React.createElement(TodoEisenhowerMatrix, {
+    todos: todos,
+    setPage: setPage
   })));
 }
 function AddWorkLog({
@@ -1703,7 +1738,7 @@ function ProjectsOnHand({
     className: "text-xs font-bold text-slate-500"
   }, project.role || "Owner"), /*#__PURE__*/React.createElement("span", {
     className: "text-xs font-bold text-slate-400"
-  }, formatDate(project.startDate), " - ", formatDate(project.endDate))), /*#__PURE__*/React.createElement("h3", {
+  }, formatCompactDate(project.startDate), " - ", formatCompactDate(project.endDate))), /*#__PURE__*/React.createElement("h3", {
     className: "mt-2 text-base font-black text-ink"
   }, project.name), project.kpiNote && /*#__PURE__*/React.createElement("p", {
     className: "mt-1 text-sm text-slate-600"
@@ -1714,7 +1749,7 @@ function ProjectsOnHand({
     project: project,
     year: year
   }), /*#__PURE__*/React.createElement("div", {
-    className: "mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4"
+    className: "mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(300px,1fr)_132px_132px_132px]"
   }, /*#__PURE__*/React.createElement("input", {
     value: project.name,
     onChange: event => updateProject(project.id, {
@@ -1733,14 +1768,14 @@ function ProjectsOnHand({
     onChange: event => updateProject(project.id, {
       startDate: event.target.value
     }),
-    className: "input"
+    className: "input px-2 text-xs"
   }), /*#__PURE__*/React.createElement("input", {
     type: "date",
     value: project.endDate,
     onChange: event => updateProject(project.id, {
       endDate: event.target.value
     }),
-    className: "input"
+    className: "input px-2 text-xs"
   })))), !sortedProjects.length && /*#__PURE__*/React.createElement(EmptyState, {
     text: "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35 projects on hand \u0E2A\u0E33\u0E2B\u0E23\u0E31\u0E1A\u0E1B\u0E35\u0E19\u0E35\u0E49."
   }))));
@@ -1864,6 +1899,79 @@ function RecentLogs({
   }, /*#__PURE__*/React.createElement(StatusBadge, {
     status: log.syncStatus
   }))))));
+}
+function TodoEisenhowerMatrix({
+  todos,
+  setPage
+}) {
+  const today = todayIso();
+  const activeTodos = sortTodos(todos).filter(todo => !["Done", "Completed"].includes(todo.status));
+  const quadrants = [{
+    id: "do",
+    title: "Do first",
+    subtitle: "Important and urgent",
+    tone: "border-red-100 bg-red-50/60",
+    items: activeTodos.filter(todo => todo.priority === "High" && todo.dueDate <= today)
+  }, {
+    id: "schedule",
+    title: "Schedule",
+    subtitle: "Important, not urgent",
+    tone: "border-sky-100 bg-sky-50/60",
+    items: activeTodos.filter(todo => todo.priority === "High" && todo.dueDate > today)
+  }, {
+    id: "follow",
+    title: "Follow up",
+    subtitle: "Urgent, lower priority",
+    tone: "border-amber-100 bg-amber-50/60",
+    items: activeTodos.filter(todo => todo.priority !== "High" && todo.dueDate <= today)
+  }, {
+    id: "later",
+    title: "Later",
+    subtitle: "Lower priority, not urgent",
+    tone: "border-slate-200 bg-slate-50",
+    items: activeTodos.filter(todo => todo.priority !== "High" && todo.dueDate > today)
+  }];
+  return /*#__PURE__*/React.createElement("section", {
+    className: "rounded-md border border-slate-200 bg-white p-4 shadow-sm"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "mb-4 flex items-center justify-between gap-3"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h2", {
+    className: "text-lg font-bold"
+  }, "Todo Eisenhower Matrix"), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs font-semibold text-slate-500"
+  }, "Open and doing items only")), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setPage("review"),
+    className: "rounded-md border border-slate-200 px-3 py-2 text-xs font-black text-slate-700 transition hover:border-emerald-300 hover:text-emerald-700"
+  }, "Open Memo")), /*#__PURE__*/React.createElement("div", {
+    className: "grid gap-3 sm:grid-cols-2"
+  }, quadrants.map(quadrant => /*#__PURE__*/React.createElement("div", {
+    key: quadrant.id,
+    className: `min-h-44 rounded-md border p-3 ${quadrant.tone}`
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-start justify-between gap-3"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
+    className: "text-sm font-black text-ink"
+  }, quadrant.title), /*#__PURE__*/React.createElement("p", {
+    className: "text-xs font-semibold text-slate-500"
+  }, quadrant.subtitle)), /*#__PURE__*/React.createElement("span", {
+    className: "rounded-md bg-white/80 px-2 py-1 text-xs font-black text-slate-600"
+  }, quadrant.items.length)), /*#__PURE__*/React.createElement("div", {
+    className: "mt-3 space-y-2"
+  }, quadrant.items.slice(0, 4).map(todo => /*#__PURE__*/React.createElement("button", {
+    key: todo.id,
+    onClick: () => setPage("review"),
+    className: "w-full rounded-md border border-white/70 bg-white/90 p-2 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center justify-between gap-2"
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "truncate text-sm font-black text-ink"
+  }, todo.task), /*#__PURE__*/React.createElement(TodoPill, {
+    value: todo.priority
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "mt-1 flex items-center justify-between gap-2 text-xs font-semibold text-slate-500"
+  }, /*#__PURE__*/React.createElement("span", null, formatDate(todo.dueDate)), /*#__PURE__*/React.createElement("span", null, todo.status)))), !quadrant.items.length && /*#__PURE__*/React.createElement("div", {
+    className: "rounded-md border border-dashed border-white/80 bg-white/50 p-4 text-center text-xs font-bold text-slate-500"
+  }, "No items"))))));
 }
 function WorkLogHeatmap({
   logs,
@@ -2196,6 +2304,11 @@ function sortTodos(items) {
 }
 function sortProjects(items) {
   return [...items].sort((a, b) => new Date(`${a.startDate}T00:00:00`).getTime() - new Date(`${b.startDate}T00:00:00`).getTime());
+}
+function formatCompactDate(value) {
+  if (!value || !value.includes("-")) return value || "";
+  const [year, month, day] = value.split("-");
+  return `${day}/${month}/${year.slice(-2)}`;
 }
 function projectOverlapsYear(project, year) {
   const yearStart = new Date(`${year}-01-01T00:00:00`).getTime();
