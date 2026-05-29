@@ -331,8 +331,8 @@ const storage = {
       lastSyncStatus: settings?.lastSyncStatus?.toLowerCase().includes("not configured") ? "" : settings?.lastSyncStatus || ""
     });
   },
-  getLogs: () => readJson(LOG_KEY, sampleLogs),
-  saveLogs: logs => writeJson(LOG_KEY, logs),
+  getLogs: () => sanitizeLogs(readJson(LOG_KEY, sampleLogs)),
+  saveLogs: logs => writeJson(LOG_KEY, sanitizeLogs(logs)),
   getLocations: () => readJson(LOCATION_KEY, presetLocations),
   saveLocations: locations => writeJson(LOCATION_KEY, locations),
   getTodos: () => readJson(TODO_KEY, []),
@@ -344,13 +344,16 @@ const storage = {
 };
 function dedupeLogsByDate(logs) {
   const byDate = new Map();
-  for (const log of logs) {
+  for (const log of sanitizeLogs(logs)) {
     const current = byDate.get(log.workDate);
     const currentTime = current ? new Date(current.updatedAt || current.createdAt || 0).getTime() : -1;
     const nextTime = new Date(log.updatedAt || log.createdAt || 0).getTime();
     if (!current || nextTime >= currentTime) byDate.set(log.workDate, log);
   }
   return Array.from(byDate.values()).sort((a, b) => new Date(`${b.workDate}T00:00:00`) - new Date(`${a.workDate}T00:00:00`));
+}
+function sanitizeLogs(logs) {
+  return (logs || []).filter(log => log?.workDate && !isWeekendDate(log.workDate));
 }
 const postToWebhook = async (webAppUrl, body) => {
   if (!webAppUrl) throw new Error("Sync is not active yet.");
@@ -477,6 +480,12 @@ const bangkokDateKey = (date = new Date()) => {
 };
 const todayIso = () => bangkokDateKey(new Date());
 const monthKey = dateLike => dateLike.slice(0, 7);
+const isWeekendDate = dateKey => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey || "")) return false;
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  return weekday === 0 || weekday === 6;
+};
 const formatDate = dateLike => new Intl.DateTimeFormat("en-GB", {
   day: "2-digit",
   month: "short",
@@ -527,8 +536,9 @@ function App() {
   const lastRemotePullRef = React.useRef(0);
   const isPullingRemoteRef = React.useRef(false);
   const saveLogs = next => {
-    setLogs(next);
-    storage.saveLogs(next);
+    const weekdayLogs = next.filter(log => !isWeekendDate(log.workDate));
+    setLogs(weekdayLogs);
+    storage.saveLogs(weekdayLogs);
   };
   const saveLocations = next => {
     setLocations(next);
@@ -560,6 +570,10 @@ function App() {
     setLastAutoRefresh(new Date().toISOString());
   };
   const addWorkLog = async draft => {
+    if (isWeekendDate(draft.workDate)) {
+      notify("Sat/Sun are holidays. Work log was not saved.");
+      return;
+    }
     const existingLog = logs.find(log => log.workDate === draft.workDate);
     const pendingLog = {
       id: existingLog?.id || uid("log"),
@@ -810,7 +824,7 @@ function App() {
     let nextLogs = [...logs];
     let nextLocations = [...locations];
     let syncedCount = 0;
-    for (const log of nextLogs.filter(item => item.syncStatus !== "Synced")) {
+    for (const log of nextLogs.filter(item => item.syncStatus !== "Synced" && !isWeekendDate(item.workDate))) {
       try {
         await syncWorkLog(GOOGLE_APPS_SCRIPT_WEB_APP_URL, log);
         nextLogs = nextLogs.map(item => item.id === log.id ? {
@@ -2351,10 +2365,11 @@ function projectTimelineRange(project, year) {
   };
 }
 function mergeRemoteLogs(localLogs, remoteRows) {
-  const byDate = new Map(localLogs.map(log => [log.workDate, log]));
+  const byDate = new Map(localLogs.filter(log => !isWeekendDate(log.workDate)).map(log => [log.workDate, log]));
   for (const row of remoteRows) {
     const workDate = normalizeSheetDate(row["Work Date"]);
     if (!workDate) continue;
+    if (isWeekendDate(workDate)) continue;
     const local = byDate.get(workDate);
     if (local?.syncStatus && local.syncStatus !== "Synced") continue;
     byDate.set(workDate, {
