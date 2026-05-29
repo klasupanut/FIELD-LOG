@@ -148,10 +148,19 @@ textarea {
   box-shadow: inset 0 0 0 1px var(--mobile-log-border, transparent);
 }
 
+.calendar-weekend-day {
+  background: linear-gradient(180deg, #fff7ed 0%, #fff1f2 100%);
+}
+
 @media (min-width: 640px) {
   .calendar-mobile-day.has-log {
     background: #fff !important;
     box-shadow: none;
+  }
+
+  .calendar-mobile-day.calendar-weekend-day.has-log,
+  .calendar-weekend-day {
+    background: linear-gradient(180deg, #fff7ed 0%, #fff1f2 100%) !important;
   }
 }
 
@@ -1389,9 +1398,10 @@ function CalendarView({
     const dayLogs = day ? logsByDate[day] || [] : [];
     const firstLogLocation = dayLogs[0] ? findLocation(locations, dayLogs[0].location) : null;
     const mobileSoft = dayLogs[0] ? softenColor(firstLogLocation?.color || "#4f8f7a") : null;
+    const isWeekend = index % 7 >= 5;
     return /*#__PURE__*/React.createElement("div", {
       key: `${day}-${index}`,
-      className: `calendar-mobile-day min-h-[74px] bg-white p-1.5 sm:min-h-24 sm:p-2 ${dayLogs.length ? "has-log" : ""}`,
+      className: `calendar-mobile-day min-h-[74px] p-1.5 sm:min-h-24 sm:p-2 ${isWeekend ? "calendar-weekend-day" : "bg-white"} ${dayLogs.length ? "has-log" : ""}`,
       style: {
         "--mobile-log-bg": mobileSoft?.bg || "#fff",
         "--mobile-log-border": mobileSoft?.border || "transparent"
@@ -2104,9 +2114,10 @@ function DashboardCalendar({
   }, day)), days.map((day, index) => {
     const dayLogs = day ? logsByDate[day] || [] : [];
     const isToday = day === todayIso();
+    const isWeekend = index % 7 >= 5;
     return /*#__PURE__*/React.createElement("div", {
       key: `${day}-dashboard-${index}`,
-      className: "group relative min-h-14 bg-white p-1.5"
+      className: `group relative min-h-14 p-1.5 ${isWeekend ? "calendar-weekend-day" : "bg-white"}`
     }, day && /*#__PURE__*/React.createElement("div", {
       className: `mx-auto grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${isToday ? "bg-emerald-500 text-white" : "text-slate-700"}`
     }, Number(day.slice(-2))), /*#__PURE__*/React.createElement("div", {
@@ -2454,9 +2465,10 @@ function findLocation(locations, name) {
   return locations.find(location => location.name === name);
 }
 function calendarDays(month) {
-  const first = new Date(`${month}-01T00:00:00`);
-  const daysInMonth = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
-  const mondayOffset = (first.getDay() + 6) % 7;
+  const [year, monthNumber] = month.split("-").map(Number);
+  const first = new Date(Date.UTC(year, monthNumber - 1, 1));
+  const daysInMonth = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  const mondayOffset = (first.getUTCDay() + 6) % 7;
   const days = Array.from({
     length: mondayOffset
   }, () => "");
