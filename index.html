@@ -396,6 +396,13 @@ const syncTodo = (webAppUrl, todo) => postToWebhook(webAppUrl, {
     "Sync Status": "Synced"
   }
 });
+const deleteRemoteTodo = (webAppUrl, todo) => postToWebhook(webAppUrl, {
+  action: "deleteTodo",
+  sheet: "Todos",
+  row: {
+    "Timestamp Created": todo.createdAt
+  }
+});
 const testConnection = webAppUrl => postToWebhook(webAppUrl, {
   action: "ping",
   app: "FieldLog",
@@ -661,9 +668,26 @@ function App() {
       notify("Memo updated locally. Sync is pending.");
     }
   };
-  const deleteTodo = id => {
+  const deleteTodo = async id => {
+    const targetTodo = todos.find(todo => todo.id === id);
+    if (!targetTodo) return;
     saveTodos(todos.filter(todo => todo.id !== id));
-    notify("Memo deleted locally.");
+    try {
+      await deleteRemoteTodo(GOOGLE_APPS_SCRIPT_WEB_APP_URL, targetTodo);
+      saveSettings({
+        ...storage.getSettings(),
+        lastSyncStatus: "Memo deleted and synced",
+        lastSyncAt: new Date().toISOString()
+      });
+      notify("Memo deleted and synced.");
+    } catch (error) {
+      saveSettings({
+        ...storage.getSettings(),
+        lastSyncStatus: error.message,
+        lastSyncAt: new Date().toISOString()
+      });
+      notify("Memo deleted locally. Delete sync is pending.");
+    }
   };
   const syncPending = async () => {
     let nextLogs = [...logs];
