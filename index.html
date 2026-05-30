@@ -175,10 +175,21 @@ textarea {
   background: linear-gradient(180deg, #fff7ed 0%, #fff1f2 100%);
 }
 
+.calendar-normal-day {
+  background: linear-gradient(135deg, rgba(224, 242, 254, 0.96), rgba(238, 242, 255, 0.98) 48%, rgba(245, 243, 255, 0.96)) !important;
+  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.20);
+}
+
 @media (min-width: 640px) {
   .calendar-mobile-day.has-log {
     background: #fff !important;
     box-shadow: none;
+  }
+
+  .calendar-mobile-day.calendar-normal-day.has-log,
+  .calendar-normal-day {
+    background: linear-gradient(135deg, rgba(224, 242, 254, 0.96), rgba(238, 242, 255, 0.98) 48%, rgba(245, 243, 255, 0.96)) !important;
+    box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.20);
   }
 
   .calendar-mobile-day.calendar-weekend-day.has-log,
@@ -400,7 +411,8 @@ const syncWorkLog = (webAppUrl, log) => postToWebhook(webAppUrl, {
     "End Time": log.endTime,
     Location: log.location,
     Note: log.note,
-    "Sync Status": "Synced"
+    "Sync Status": "Synced",
+    "Attendance Status": log.attendanceStatus || ""
   }
 });
 const syncLocation = (webAppUrl, location) => postToWebhook(webAppUrl, {
@@ -625,6 +637,7 @@ function App() {
       endTime: END_TIME,
       location: draft.location,
       note: draft.note.trim(),
+      attendanceStatus: draft.attendanceStatus || existingLog?.attendanceStatus || "",
       syncStatus: "Pending Sync"
     };
     const nextLogs = existingLog ? logs.map(log => log.id === existingLog.id ? pendingLog : log) : [pendingLog, ...logs];
@@ -705,6 +718,49 @@ function App() {
     } : log);
     saveLogs(nextLogs);
     notify("Log location updated locally.");
+  };
+  const stampTodayNormal = async () => {
+    const workDate = todayIso();
+    if (isWeekendDate(workDate)) {
+      notify("Sat/Sun are holidays. Normal stamp was not saved.");
+      return;
+    }
+    const existingLog = logs.find(log => log.workDate === workDate);
+    const pendingLog = {
+      id: existingLog?.id || uid("log"),
+      createdAt: existingLog?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      workDate,
+      startTime: START_TIME,
+      endTime: END_TIME,
+      location: existingLog?.location || "",
+      note: existingLog?.note || "Normal stamped",
+      attendanceStatus: "Normal",
+      syncStatus: "Pending Sync"
+    };
+    const nextLogs = existingLog ? logs.map(log => log.id === existingLog.id ? pendingLog : log) : [pendingLog, ...logs];
+    saveLogs(nextLogs);
+    try {
+      await syncWorkLog(GOOGLE_APPS_SCRIPT_WEB_APP_URL, pendingLog);
+      const synced = {
+        ...pendingLog,
+        syncStatus: "Synced"
+      };
+      saveLogs(nextLogs.map(log => log.id === synced.id ? synced : log));
+      saveSettings({
+        ...storage.getSettings(),
+        lastSyncStatus: "Normal stamp synced",
+        lastSyncAt: new Date().toISOString()
+      });
+      notify("Normal stamped and synced.");
+    } catch (error) {
+      saveSettings({
+        ...storage.getSettings(),
+        lastSyncStatus: error.message,
+        lastSyncAt: new Date().toISOString()
+      });
+      notify("Normal stamped locally. Sync is pending.");
+    }
   };
   const addTodo = async draft => {
     const pendingTodo = {
@@ -1026,6 +1082,7 @@ function App() {
     deleteProject,
     setPage,
     updateLogLocation,
+    stampTodayNormal,
     updateCustomLocation,
     deleteCustomLocation,
     syncPending: syncNow,
@@ -1165,7 +1222,8 @@ function Dashboard({
   locations,
   projects,
   todos,
-  setPage
+  setPage,
+  stampTodayNormal
 }) {
   const sortedLogs = sortLogsByDateDesc(logs);
   const todayLog = sortedLogs.find(log => log.workDate === todayIso());
@@ -1174,7 +1232,8 @@ function Dashboard({
   const currentYear = Number(todayIso().slice(0, 4));
   const dashboardProjects = sortProjectsForTimeline(projects.filter(project => projectOverlapsYear(project, currentYear)), currentYear);
   const todayLocation = todayLog ? findLocation(locations, todayLog.location) : null;
-  const todayLocationColor = todayLocation?.color || "#94a3b8";
+  const todayIsNormal = isNormalStamped(todayLog);
+  const todayLocationColor = todayLocation?.color || (todayIsNormal ? "#6366f1" : "#94a3b8");
   return /*#__PURE__*/React.createElement("div", {
     className: "space-y-4"
   }, /*#__PURE__*/React.createElement("div", {
@@ -1191,7 +1250,11 @@ function Dashboard({
     className: "grid gap-4 xl:grid-cols-[minmax(360px,0.82fr)_minmax(580px,1.35fr)]"
   }, /*#__PURE__*/React.createElement("section", {
     className: "rounded-md border border-slate-200 bg-white p-4 shadow-sm"
-  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex h-full flex-col"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex-1"
+  }, /*#__PURE__*/React.createElement("div", {
     className: "flex items-start justify-between gap-3"
   }, /*#__PURE__*/React.createElement("h2", {
     className: "text-sm font-black"
@@ -1201,7 +1264,7 @@ function Dashboard({
     color: todayLocationColor
   }), /*#__PURE__*/React.createElement("span", {
     className: "max-w-36 truncate"
-  }, todayLog ? todayLog.location : "Not logged"))), /*#__PURE__*/React.createElement("div", {
+  }, todayLog ? todayLog.location || todayLog.attendanceStatus || "Logged" : "Not logged"))), /*#__PURE__*/React.createElement("div", {
     className: "mt-5 flex items-start gap-3"
   }, /*#__PURE__*/React.createElement("div", {
     className: `grid h-10 w-10 shrink-0 place-items-center rounded-full text-base font-black ${todayLog ? "bg-indigo-50 text-indigo-700" : "bg-amber-50 text-amber-700"}`
@@ -1211,7 +1274,9 @@ function Dashboard({
     className: "mt-1 text-sm font-semibold text-slate-600"
   }, START_TIME, " - ", END_TIME), todayLog?.note && /*#__PURE__*/React.createElement("p", {
     className: "mt-1 max-h-9 overflow-hidden text-xs font-semibold text-slate-500"
-  }, todayLog.note))), /*#__PURE__*/React.createElement("div", {
+  }, todayLog.note))), todayIsNormal && /*#__PURE__*/React.createElement("div", {
+    className: "mt-3 rounded-md border border-indigo-100 bg-indigo-50/80 px-3 py-2 text-xs font-black text-indigo-700"
+  }, "Normal stamped. No month-end adjustment needed."), /*#__PURE__*/React.createElement("div", {
     className: "mt-5 border-t border-white/70 pt-4"
   }, /*#__PURE__*/React.createElement("h3", {
     className: "text-xs font-black uppercase text-slate-400"
@@ -1229,7 +1294,10 @@ function Dashboard({
     label: "Total Work Hours",
     value: `${(monthLogs.length * 9.5).toFixed(1)} hrs`,
     tone: "amber"
-  }))))), /*#__PURE__*/React.createElement("section", {
+  })))), /*#__PURE__*/React.createElement("button", {
+    onClick: stampTodayNormal,
+    className: `mt-5 w-full translate-y-1 rounded-md border px-4 py-3 text-sm font-black shadow-sm transition ${todayIsNormal ? "border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100" : "border-indigo-200 bg-gradient-to-r from-sky-500 to-indigo-500 text-white hover:from-sky-600 hover:to-indigo-600"}`
+  }, todayIsNormal ? "Normal stamped" : "Normal stampped"))), /*#__PURE__*/React.createElement("section", {
     className: "rounded-md border border-slate-200 bg-white p-4 shadow-sm"
   }, /*#__PURE__*/React.createElement("div", {
     className: "mb-4 flex items-center justify-between gap-3"
@@ -1444,9 +1512,10 @@ function CalendarView({
     const firstLogLocation = dayLogs[0] ? findLocation(locations, dayLogs[0].location) : null;
     const mobileSoft = dayLogs[0] ? softenColor(firstLogLocation?.color || "#4f8f7a") : null;
     const isWeekend = index % 7 >= 5;
+    const isNormal = dayLogs.some(isNormalStamped);
     return /*#__PURE__*/React.createElement("div", {
       key: `${day}-${index}`,
-      className: `calendar-mobile-day min-h-[74px] p-1.5 sm:min-h-24 sm:p-2 ${isWeekend ? "calendar-weekend-day" : "bg-white"} ${dayLogs.length ? "has-log" : ""}`,
+      className: `calendar-mobile-day min-h-[74px] p-1.5 sm:min-h-24 sm:p-2 ${isNormal ? "calendar-normal-day" : isWeekend ? "calendar-weekend-day" : "bg-white"} ${dayLogs.length ? "has-log" : ""}`,
       style: {
         "--mobile-log-bg": mobileSoft?.bg || "#fff",
         "--mobile-log-border": mobileSoft?.border || "transparent"
@@ -2133,7 +2202,7 @@ function SheetStructure() {
     className: "text-slate-600"
   }, "WorkLogs, Locations, Todos, and Projects are synced through the automatic sync service."), /*#__PURE__*/React.createElement("div", {
     className: "mt-3 space-y-2 text-xs text-slate-500"
-  }, /*#__PURE__*/React.createElement("p", null, /*#__PURE__*/React.createElement("strong", null, "WorkLogs:"), " Timestamp Created, Work Date, Start Time, End Time, Location, Note, Sync Status"), /*#__PURE__*/React.createElement("p", null, /*#__PURE__*/React.createElement("strong", null, "Locations:"), " Timestamp Created, Location Name, Category, Color, Source, Sync Status"), /*#__PURE__*/React.createElement("p", null, /*#__PURE__*/React.createElement("strong", null, "Todos:"), " Timestamp Created, Due Date, Task, Priority, Status, Note, Sync Status"), /*#__PURE__*/React.createElement("p", null, /*#__PURE__*/React.createElement("strong", null, "Projects:"), " Timestamp Created, Project Name, Role, Start Date, End Date, Status, KPI Note, Sync Status")));
+  }, /*#__PURE__*/React.createElement("p", null, /*#__PURE__*/React.createElement("strong", null, "WorkLogs:"), " Timestamp Created, Work Date, Start Time, End Time, Location, Note, Sync Status, Attendance Status"), /*#__PURE__*/React.createElement("p", null, /*#__PURE__*/React.createElement("strong", null, "Locations:"), " Timestamp Created, Location Name, Category, Color, Source, Sync Status"), /*#__PURE__*/React.createElement("p", null, /*#__PURE__*/React.createElement("strong", null, "Todos:"), " Timestamp Created, Due Date, Task, Priority, Status, Note, Sync Status"), /*#__PURE__*/React.createElement("p", null, /*#__PURE__*/React.createElement("strong", null, "Projects:"), " Timestamp Created, Project Name, Role, Start Date, End Date, Status, KPI Note, Sync Status")));
 }
 function AppsScriptHint() {
   return /*#__PURE__*/React.createElement("details", {
@@ -2211,9 +2280,10 @@ function DashboardCalendar({
     const dayLogs = day ? logsByDate[day] || [] : [];
     const isToday = day === todayIso();
     const isWeekend = index % 7 >= 5;
+    const isNormal = dayLogs.some(isNormalStamped);
     return /*#__PURE__*/React.createElement("div", {
       key: `${day}-dashboard-${index}`,
-      className: `group relative min-h-14 p-1.5 ${isWeekend ? "calendar-weekend-day" : "bg-white"}`
+      className: `group relative min-h-14 p-1.5 ${isNormal ? "calendar-normal-day" : isWeekend ? "calendar-weekend-day" : "bg-white"}`
     }, day && /*#__PURE__*/React.createElement("div", {
       className: `mx-auto grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${isToday ? "bg-gradient-to-r from-sky-500 to-indigo-500 text-white" : "text-slate-700"}`
     }, Number(day.slice(-2))), /*#__PURE__*/React.createElement("div", {
@@ -2443,6 +2513,9 @@ function sortTodos(items) {
     return (priorityRank[a.priority] ?? 9) - (priorityRank[b.priority] ?? 9);
   });
 }
+function isNormalStamped(log) {
+  return String(log?.attendanceStatus || "").trim().toLowerCase() === "normal";
+}
 function isTodoDone(todo) {
   return ["done", "completed", "complete"].includes(String(todo.status || "").trim().toLowerCase());
 }
@@ -2513,6 +2586,7 @@ function mergeRemoteLogs(localLogs, remoteRows) {
       endTime: row["End Time"] || END_TIME,
       location: row.Location || local?.location || "",
       note: row.Note || "",
+      attendanceStatus: row["Attendance Status"] || local?.attendanceStatus || "",
       syncStatus: "Synced"
     });
   }
