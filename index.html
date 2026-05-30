@@ -71,6 +71,15 @@ textarea {
   backdrop-filter: blur(18px) saturate(128%);
 }
 
+.group\/sidebar {
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.82), rgba(30, 41, 89, 0.72) 46%, rgba(49, 46, 129, 0.68)),
+    radial-gradient(circle at 22% 12%, rgba(14, 165, 233, 0.24), transparent 36%),
+    radial-gradient(circle at 78% 86%, rgba(139, 92, 246, 0.22), transparent 38%) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(132%);
+  backdrop-filter: blur(22px) saturate(132%);
+}
+
 .status-dot {
   display: inline-block;
   height: 8px;
@@ -1089,7 +1098,7 @@ function Nav({
   setPage
 }) {
   return /*#__PURE__*/React.createElement("nav", {
-    className: "group/sidebar fixed left-0 top-0 z-40 hidden h-screen w-20 flex-col overflow-hidden bg-[#071826] text-white shadow-2xl transition-[width] duration-300 ease-out hover:w-64 lg:flex"
+    className: "group/sidebar fixed left-0 top-0 z-40 hidden h-screen w-20 flex-col overflow-hidden border-r border-white/10 bg-[#071826]/78 text-white shadow-2xl backdrop-blur-2xl transition-[width] duration-300 ease-out hover:w-64 lg:flex"
   }, /*#__PURE__*/React.createElement("div", {
     className: "flex items-center gap-3 border-b border-white/10 px-5 py-6"
   }, /*#__PURE__*/React.createElement("div", {
