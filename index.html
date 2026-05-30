@@ -2306,11 +2306,11 @@ function StatusPill({
 }
 function projectTimelineTone(status) {
   return {
-    Active: "border-emerald-200 bg-emerald-300 hover:bg-emerald-400",
-    Planning: "border-sky-200 bg-sky-300 hover:bg-sky-400",
-    "On Hold": "border-amber-200 bg-amber-300 hover:bg-amber-400",
-    Completed: "border-slate-200 bg-slate-300 hover:bg-slate-400"
-  }[status] || "border-slate-200 bg-slate-300 hover:bg-slate-400";
+    Active: "border-emerald-300 bg-gradient-to-r from-emerald-400 to-teal-500 shadow-emerald-900/10 hover:from-emerald-500 hover:to-teal-600",
+    Planning: "border-sky-300 bg-gradient-to-r from-sky-400 to-cyan-500 shadow-sky-900/10 hover:from-sky-500 hover:to-cyan-600",
+    "On Hold": "border-amber-300 bg-gradient-to-r from-amber-300 to-orange-400 shadow-amber-900/10 hover:from-amber-400 hover:to-orange-500",
+    Completed: "border-violet-300 bg-gradient-to-r from-violet-300 to-indigo-400 shadow-indigo-900/10 hover:from-violet-400 hover:to-indigo-500"
+  }[status] || "border-rose-300 bg-gradient-to-r from-rose-300 to-pink-400 shadow-rose-900/10 hover:from-rose-400 hover:to-pink-500";
 }
 function ProjectTimelineBar({
   project,
