@@ -1126,7 +1126,7 @@ function Dashboard({
   const currentMonth = todayIso().slice(0, 7);
   const monthLogs = sortedLogs.filter(log => monthKey(log.workDate) === currentMonth);
   const currentYear = Number(todayIso().slice(0, 4));
-  const activeProjects = sortProjects(projects).filter(project => project.status !== "Completed" && projectOverlapsYear(project, currentYear)).slice(0, 5);
+  const dashboardProjects = sortProjectsForTimeline(projects.filter(project => projectOverlapsYear(project, currentYear)), currentYear);
   return /*#__PURE__*/React.createElement("div", {
     className: "space-y-4"
   }, /*#__PURE__*/React.createElement("div", {
@@ -1194,25 +1194,11 @@ function Dashboard({
   }, "Projects on hand"), /*#__PURE__*/React.createElement("button", {
     onClick: () => setPage("projects"),
     className: "text-xs font-black text-emerald-700"
-  }, "View all")), /*#__PURE__*/React.createElement("div", {
-    className: "space-y-3"
-  }, activeProjects.map(project => /*#__PURE__*/React.createElement("button", {
-    key: project.id,
-    onClick: () => setPage("projects"),
-    className: "w-full rounded-md border border-slate-100 bg-slate-50 p-3 text-left transition hover:border-emerald-200 hover:bg-emerald-50/40"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "flex items-start justify-between gap-3"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "min-w-0"
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "truncate text-sm font-black text-ink"
-  }, project.name), /*#__PURE__*/React.createElement("div", {
-    className: "mt-1 text-xs font-semibold text-slate-500"
-  }, formatDate(project.startDate), " - ", formatDate(project.endDate))), /*#__PURE__*/React.createElement(StatusPill, {
-    value: project.status
-  })))), !activeProjects.length && /*#__PURE__*/React.createElement(EmptyState, {
-    text: "No active projects on hand this year."
-  })))), /*#__PURE__*/React.createElement("div", {
+  }, "View all")), /*#__PURE__*/React.createElement(DashboardProjectTimeline, {
+    projects: dashboardProjects,
+    year: currentYear,
+    setPage: setPage
+  }))), /*#__PURE__*/React.createElement("div", {
     className: "grid gap-4 xl:grid-cols-[1fr_1fr]"
   }, /*#__PURE__*/React.createElement(DashboardCalendar, {
     logs: sortedLogs,
@@ -1933,36 +1919,81 @@ function RecentLogs({
     status: log.syncStatus
   }))))));
 }
+function DashboardProjectTimeline({
+  projects,
+  year,
+  setPage
+}) {
+  const [selectedId, setSelectedId] = useState("");
+  const selectedProject = projects.find(project => project.id === selectedId);
+  const months = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
+  const height = Math.max(84, projects.length * 24 + 22);
+  if (!projects.length) return /*#__PURE__*/React.createElement(EmptyState, {
+    text: "No projects on hand this year."
+  });
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "relative rounded-md border border-slate-200 bg-slate-50 p-3",
+    style: {
+      height
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "absolute inset-x-3 top-3 grid grid-cols-12 text-center text-[9px] font-black text-slate-400"
+  }, months.map((month, index) => /*#__PURE__*/React.createElement("span", {
+    key: `${month}-${index}`
+  }, month))), /*#__PURE__*/React.createElement("div", {
+    className: "absolute inset-x-3 top-8 bottom-3 rounded-md bg-white shadow-inner"
+  }, projects.map((project, index) => {
+    const range = projectTimelineRange(project, year);
+    const active = selectedId === project.id;
+    return /*#__PURE__*/React.createElement("button", {
+      key: project.id,
+      type: "button",
+      onClick: () => setSelectedId(active ? "" : project.id),
+      onDoubleClick: () => setPage("projects"),
+      title: `${project.name}: ${formatDate(project.startDate)} - ${formatDate(project.endDate)}`,
+      className: `absolute h-4 rounded-full border transition hover:scale-y-125 ${active ? "border-emerald-800 bg-emerald-500 shadow-md" : projectTimelineTone(project.status)}`,
+      style: {
+        left: `${range.left}%`,
+        width: `${range.width}%`,
+        top: `${index * 22 + 8}px`
+      }
+    });
+  }))), /*#__PURE__*/React.createElement("button", {
+    onClick: () => selectedProject ? setPage("projects") : undefined,
+    className: "mt-3 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-left text-xs font-bold text-slate-600 transition hover:border-emerald-200 hover:text-emerald-700"
+  }, selectedProject ? `${selectedProject.name} / ${formatCompactDate(selectedProject.startDate)} - ${formatCompactDate(selectedProject.endDate)} / ${selectedProject.status}` : "Click a bar to show project name"));
+}
 function TodoEisenhowerMatrix({
   todos,
   setPage
 }) {
   const today = todayIso();
-  const activeTodos = sortTodos(todos).filter(todo => !["Done", "Completed"].includes(todo.status));
+  const todayValue = dateValue(today);
+  const activeTodos = sortTodos(todos).filter(todo => !isTodoDone(todo));
   const quadrants = [{
     id: "do",
     title: "Do first",
     subtitle: "Important and urgent",
     tone: "border-red-100 bg-red-50/60",
-    items: activeTodos.filter(todo => todo.priority === "High" && todo.dueDate <= today)
+    items: activeTodos.filter(todo => todo.priority === "High" && dateValue(todo.dueDate) <= todayValue)
   }, {
     id: "schedule",
     title: "Schedule",
     subtitle: "Important, not urgent",
     tone: "border-sky-100 bg-sky-50/60",
-    items: activeTodos.filter(todo => todo.priority === "High" && todo.dueDate > today)
+    items: activeTodos.filter(todo => todo.priority === "High" && dateValue(todo.dueDate) > todayValue)
   }, {
     id: "follow",
     title: "Follow up",
     subtitle: "Urgent, lower priority",
     tone: "border-amber-100 bg-amber-50/60",
-    items: activeTodos.filter(todo => todo.priority !== "High" && todo.dueDate <= today)
+    items: activeTodos.filter(todo => todo.priority !== "High" && dateValue(todo.dueDate) <= todayValue)
   }, {
     id: "later",
     title: "Later",
     subtitle: "Lower priority, not urgent",
     tone: "border-slate-200 bg-slate-50",
-    items: activeTodos.filter(todo => todo.priority !== "High" && todo.dueDate > today)
+    items: activeTodos.filter(todo => todo.priority !== "High" && dateValue(todo.dueDate) > todayValue)
   }];
   return /*#__PURE__*/React.createElement("section", {
     className: "rounded-md border border-slate-200 bg-white p-4 shadow-sm"
@@ -1990,7 +2021,7 @@ function TodoEisenhowerMatrix({
     className: "rounded-md bg-white/80 px-2 py-1 text-xs font-black text-slate-600"
   }, quadrant.items.length)), /*#__PURE__*/React.createElement("div", {
     className: "mt-3 space-y-2"
-  }, quadrant.items.slice(0, 4).map(todo => /*#__PURE__*/React.createElement("button", {
+  }, quadrant.items.map(todo => /*#__PURE__*/React.createElement("button", {
     key: todo.id,
     onClick: () => setPage("review"),
     className: "w-full rounded-md border border-white/70 bg-white/90 p-2 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow"
@@ -2273,6 +2304,14 @@ function StatusPill({
     className: `rounded-md px-2 py-1 text-xs font-bold ${tone}`
   }, value);
 }
+function projectTimelineTone(status) {
+  return {
+    Active: "border-emerald-200 bg-emerald-300 hover:bg-emerald-400",
+    Planning: "border-sky-200 bg-sky-300 hover:bg-sky-400",
+    "On Hold": "border-amber-200 bg-amber-300 hover:bg-amber-400",
+    Completed: "border-slate-200 bg-slate-300 hover:bg-slate-400"
+  }[status] || "border-slate-200 bg-slate-300 hover:bg-slate-400";
+}
 function ProjectTimelineBar({
   project,
   year
@@ -2335,6 +2374,9 @@ function sortTodos(items) {
     if (dueDiff !== 0) return dueDiff;
     return (priorityRank[a.priority] ?? 9) - (priorityRank[b.priority] ?? 9);
   });
+}
+function isTodoDone(todo) {
+  return ["done", "completed", "complete"].includes(String(todo.status || "").trim().toLowerCase());
 }
 function sortProjects(items) {
   return [...items].sort(compareProjects);
