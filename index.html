@@ -796,7 +796,7 @@ function App() {
       return;
     }
     const existingLog = logs.find(log => log.workDate === workDate);
-    const nextAttendanceStatus = isRevisedStamped(existingLog) ? "Not Revised" : "Revised";
+    const nextAttendanceStatus = isRevisedStamped(existingLog) ? "not revised" : "Revised";
     const pendingLog = {
       id: existingLog?.id || uid("log"),
       createdAt: existingLog?.createdAt || new Date().toISOString(),
