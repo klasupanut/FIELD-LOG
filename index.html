@@ -616,7 +616,7 @@ function App() {
   const lastRemotePullRef = React.useRef(0);
   const isPullingRemoteRef = React.useRef(false);
   const saveLogs = next => {
-    const weekdayLogs = next.filter(log => !isWeekendDate(log.workDate));
+    const weekdayLogs = dedupeLogsByWorkDate(next.filter(log => !isWeekendDate(log.workDate)));
     setLogs(weekdayLogs);
     storage.saveLogs(weekdayLogs);
   };
@@ -667,7 +667,7 @@ function App() {
       attendanceStatus: draft.attendanceStatus || existingLog?.attendanceStatus || "",
       syncStatus: "Pending Sync"
     };
-    const nextLogs = existingLog ? logs.map(log => log.id === existingLog.id ? pendingLog : log) : [pendingLog, ...logs];
+    const nextLogs = [pendingLog, ...logs.filter(log => log.workDate !== draft.workDate)];
     saveLogs(nextLogs);
     try {
       await syncWorkLog(GOOGLE_APPS_SCRIPT_WEB_APP_URL, pendingLog);
@@ -753,7 +753,6 @@ function App() {
       return;
     }
     const existingLog = logs.find(log => log.workDate === workDate);
-    const nextAttendanceStatus = isRevisedStamped(existingLog) ? "Not Revised" : "Revised";
     const pendingLog = {
       id: existingLog?.id || uid("log"),
       createdAt: existingLog?.createdAt || new Date().toISOString(),
@@ -766,7 +765,7 @@ function App() {
       attendanceStatus: "Normal",
       syncStatus: "Pending Sync"
     };
-    const nextLogs = existingLog ? logs.map(log => log.id === existingLog.id ? pendingLog : log) : [pendingLog, ...logs];
+    const nextLogs = [pendingLog, ...logs.filter(log => log.workDate !== workDate)];
     saveLogs(nextLogs);
     try {
       await syncWorkLog(GOOGLE_APPS_SCRIPT_WEB_APP_URL, pendingLog);
@@ -797,6 +796,7 @@ function App() {
       return;
     }
     const existingLog = logs.find(log => log.workDate === workDate);
+    const nextAttendanceStatus = isRevisedStamped(existingLog) ? "Not Revised" : "Revised";
     const pendingLog = {
       id: existingLog?.id || uid("log"),
       createdAt: existingLog?.createdAt || new Date().toISOString(),
@@ -809,7 +809,7 @@ function App() {
       attendanceStatus: nextAttendanceStatus,
       syncStatus: "Pending Sync"
     };
-    const nextLogs = existingLog ? logs.map(log => log.id === existingLog.id ? pendingLog : log) : [pendingLog, ...logs];
+    const nextLogs = [pendingLog, ...logs.filter(log => log.workDate !== workDate)];
     saveLogs(nextLogs);
     try {
       await syncWorkLog(GOOGLE_APPS_SCRIPT_WEB_APP_URL, pendingLog);
@@ -1619,7 +1619,7 @@ function CalendarView({
     }))), day && !isWeekend && /*#__PURE__*/React.createElement("button", {
       type: "button",
       onClick: () => stampLogRevised(day),
-      className: `mt-auto w-full rounded px-1 py-1 text-[9px] font-black leading-none transition sm:hidden ${isRevised ? "bg-emerald-600 text-white" : "bg-white/85 text-emerald-700 hover:bg-emerald-50"}`
+      className: `mt-auto w-full overflow-hidden rounded px-0.5 py-1 text-[7px] font-black leading-none tracking-normal transition sm:hidden ${isRevised ? "bg-emerald-600 text-white" : "bg-white/85 text-emerald-700 hover:bg-emerald-50"}`
     }, "REVISED"));
   })));
 }
@@ -2580,6 +2580,21 @@ function sortLogsByDateDesc(items) {
     if (dateDiff !== 0) return dateDiff;
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
+}
+function dedupeLogsByWorkDate(items) {
+  const byDate = new Map();
+  for (const log of items) {
+    if (!log?.workDate) continue;
+    const current = byDate.get(log.workDate);
+    const currentTime = current ? dateTimeValue(current.updatedAt || current.createdAt) : -1;
+    const nextTime = dateTimeValue(log.updatedAt || log.createdAt);
+    if (!current || nextTime >= currentTime) byDate.set(log.workDate, log);
+  }
+  return sortLogsByDateDesc(Array.from(byDate.values()));
+}
+function dateTimeValue(value) {
+  const time = new Date(value || 0).getTime();
+  return Number.isNaN(time) ? 0 : time;
 }
 function sortTodos(items) {
   const statusRank = {
