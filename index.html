@@ -180,10 +180,21 @@ textarea {
   box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.20);
 }
 
+.calendar-holiday-day {
+  background: linear-gradient(135deg, rgba(254, 226, 226, 0.98), rgba(255, 228, 230, 0.98) 52%, rgba(254, 202, 202, 0.90)) !important;
+  box-shadow: inset 0 0 0 1px rgba(220, 38, 38, 0.22);
+}
+
 @media (min-width: 640px) {
   .calendar-mobile-day.has-log {
     background: #fff !important;
     box-shadow: none;
+  }
+
+  .calendar-mobile-day.calendar-holiday-day.has-log,
+  .calendar-holiday-day {
+    background: linear-gradient(135deg, rgba(254, 226, 226, 0.98), rgba(255, 228, 230, 0.98) 52%, rgba(254, 202, 202, 0.90)) !important;
+    box-shadow: inset 0 0 0 1px rgba(220, 38, 38, 0.22);
   }
 
   .calendar-mobile-day.calendar-normal-day.has-log,
@@ -1513,9 +1524,10 @@ function CalendarView({
     const mobileSoft = dayLogs[0] ? softenColor(firstLogLocation?.color || "#4f8f7a") : null;
     const isWeekend = index % 7 >= 5;
     const isNormal = dayLogs.some(isNormalStamped);
+    const isHoliday = dayLogs.some(isHolidayLog);
     return /*#__PURE__*/React.createElement("div", {
       key: `${day}-${index}`,
-      className: `calendar-mobile-day min-h-[74px] p-1.5 sm:min-h-24 sm:p-2 ${isNormal ? "calendar-normal-day" : isWeekend ? "calendar-weekend-day" : "bg-white"} ${dayLogs.length ? "has-log" : ""}`,
+      className: `calendar-mobile-day min-h-[74px] p-1.5 sm:min-h-24 sm:p-2 ${isHoliday ? "calendar-holiday-day" : isNormal ? "calendar-normal-day" : isWeekend ? "calendar-weekend-day" : "bg-white"} ${dayLogs.length ? "has-log" : ""}`,
       style: {
         "--mobile-log-bg": mobileSoft?.bg || "#fff",
         "--mobile-log-border": mobileSoft?.border || "transparent"
@@ -2281,9 +2293,10 @@ function DashboardCalendar({
     const isToday = day === todayIso();
     const isWeekend = index % 7 >= 5;
     const isNormal = dayLogs.some(isNormalStamped);
+    const isHoliday = dayLogs.some(isHolidayLog);
     return /*#__PURE__*/React.createElement("div", {
       key: `${day}-dashboard-${index}`,
-      className: `group relative min-h-14 p-1.5 ${isNormal ? "calendar-normal-day" : isWeekend ? "calendar-weekend-day" : "bg-white"}`
+      className: `group relative min-h-14 p-1.5 ${isHoliday ? "calendar-holiday-day" : isNormal ? "calendar-normal-day" : isWeekend ? "calendar-weekend-day" : "bg-white"}`
     }, day && /*#__PURE__*/React.createElement("div", {
       className: `mx-auto grid h-6 w-6 place-items-center rounded-full text-xs font-bold ${isToday ? "bg-gradient-to-r from-sky-500 to-indigo-500 text-white" : "text-slate-700"}`
     }, Number(day.slice(-2))), /*#__PURE__*/React.createElement("div", {
@@ -2515,6 +2528,9 @@ function sortTodos(items) {
 }
 function isNormalStamped(log) {
   return String(log?.attendanceStatus || "").trim().toLowerCase() === "normal";
+}
+function isHolidayLog(log) {
+  return String(log?.location || "").trim().toLowerCase() === "holiday";
 }
 function isTodoDone(todo) {
   return ["done", "completed", "complete"].includes(String(todo.status || "").trim().toLowerCase());
