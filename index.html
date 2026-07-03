@@ -1468,26 +1468,43 @@ function AddWorkLog({
   });
   const [showLocationForm, setShowLocationForm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const submit = async event => {
-    event.preventDefault();
-    if (!draft.location || isSaving) return;
+  const normalStampDraft = source => ({
+    ...source,
+    location: "",
+    note: source.note.trim() || NORMAL_STAMPED_LABEL,
+    attendanceStatus: "Normal"
+  });
+  const saveDraft = async (source, {
+    keepDate = false
+  } = {}) => {
     setIsSaving(true);
     try {
-      const isNormalStamp = draft.location === NORMAL_STAMPED_LOCATION_OPTION;
-      await addWorkLog(isNormalStamp ? {
-        ...draft,
-        location: "",
-        note: draft.note.trim() || NORMAL_STAMPED_LABEL,
-        attendanceStatus: "Normal"
-      } : draft);
+      const isNormalStamp = source.location === NORMAL_STAMPED_LOCATION_OPTION;
+      await addWorkLog(isNormalStamp ? normalStampDraft(source) : source);
       setDraft({
-        workDate: todayIso(),
-        location: draft.location,
+        workDate: keepDate ? source.workDate : todayIso(),
+        location: source.location,
         note: ""
       });
     } finally {
       setIsSaving(false);
     }
+  };
+  const handleLocationChange = async nextLocation => {
+    const nextDraft = {
+      ...draft,
+      location: nextLocation
+    };
+    setDraft(nextDraft);
+    if (nextLocation !== NORMAL_STAMPED_LOCATION_OPTION || isSaving) return;
+    await saveDraft(nextDraft, {
+      keepDate: true
+    });
+  };
+  const submit = async event => {
+    event.preventDefault();
+    if (!draft.location || isSaving) return;
+    await saveDraft(draft);
   };
   return /*#__PURE__*/React.createElement("div", {
     className: "grid gap-4 xl:grid-cols-[1fr_360px]"
@@ -1522,11 +1539,9 @@ function AddWorkLog({
     className: "flex gap-2"
   }, /*#__PURE__*/React.createElement("select", {
     value: draft.location,
-    onChange: e => setDraft({
-      ...draft,
-      location: e.target.value
-    }),
+    onChange: e => handleLocationChange(e.target.value),
     className: "input min-w-0 flex-1",
+    disabled: isSaving,
     required: true
   }, /*#__PURE__*/React.createElement("option", {
     value: NORMAL_STAMPED_LOCATION_OPTION
@@ -1535,8 +1550,9 @@ function AddWorkLog({
     value: location.name
   }, location.name))), /*#__PURE__*/React.createElement("button", {
     type: "button",
+    disabled: isSaving,
     onClick: () => setShowLocationForm(!showLocationForm),
-    className: "rounded-md border border-slate-300 px-3 text-sm font-bold text-slate-700"
+    className: "rounded-md border border-slate-300 px-3 text-sm font-bold text-slate-700 disabled:cursor-wait disabled:opacity-60"
   }, "Add"))), /*#__PURE__*/React.createElement(Field, {
     label: "Work Details / Note",
     wide: true
