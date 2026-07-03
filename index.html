@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -255,7 +255,7 @@ import { createRoot } from "https://esm.sh/react-dom@18.3.1/client";
 const START_TIME = "09:30";
 const END_TIME = "19:00";
 const GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/13eliZlc2a7XhyzG22Iv1du0KM02LyxyMidO1SDzTI-4";
-const GOOGLE_APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxzebJGa_IZFGSDOyISJ7OpPVfQhJGOi7HZ41TGxKyFvfUg8w1Cky2QrJC9yHjoA6zG/exec";
+const GOOGLE_APPS_SCRIPT_WEB_APP_URL = "";
 const presetLocations = [{
   id: "preset-voco",
   name: "VOCO",
@@ -746,6 +746,39 @@ function App() {
     saveLogs(nextLogs);
     notify("Log location updated locally.");
   };
+  const updateLogAttendanceStatus = async (id, nextStatus) => {
+    const targetLog = logs.find(log => log.id === id);
+    if (!targetLog) return;
+    const pendingLog = {
+      ...targetLog,
+      attendanceStatus: nextStatus,
+      updatedAt: new Date().toISOString(),
+      syncStatus: "Pending Sync"
+    };
+    const nextLogs = [pendingLog, ...logs.filter(log => log.workDate !== targetLog.workDate)];
+    saveLogs(nextLogs);
+    try {
+      await syncWorkLog(GOOGLE_APPS_SCRIPT_WEB_APP_URL, pendingLog);
+      const synced = {
+        ...pendingLog,
+        syncStatus: "Synced"
+      };
+      saveLogs(nextLogs.map(log => log.id === synced.id ? synced : log));
+      saveSettings({
+        ...storage.getSettings(),
+        lastSyncStatus: "Attendance status synced",
+        lastSyncAt: new Date().toISOString()
+      });
+      notify(nextStatus ? "Attendance status updated and synced." : "Attendance status cleared and synced.");
+    } catch (error) {
+      saveSettings({
+        ...storage.getSettings(),
+        lastSyncStatus: error.message,
+        lastSyncAt: new Date().toISOString()
+      });
+      notify("Attendance status updated locally. Sync is pending.");
+    }
+  };
   const stampTodayNormal = async () => {
     const workDate = todayIso();
     if (isWeekendDate(workDate)) {
@@ -1153,6 +1186,7 @@ function App() {
     deleteProject,
     setPage,
     updateLogLocation,
+    updateLogAttendanceStatus,
     stampTodayNormal,
     stampLogRevised,
     updateCustomLocation,
@@ -1626,7 +1660,8 @@ function CalendarView({
 function TimelineView({
   logs,
   locations,
-  updateLogLocation
+  updateLogLocation,
+  updateLogAttendanceStatus
 }) {
   const [month, setMonth] = useState(todayIso().slice(0, 7));
   const [location, setLocation] = useState("All");
@@ -1671,6 +1706,9 @@ function TimelineView({
     value: log.location,
     locations: locations,
     onChange: nextLocation => updateLogLocation(log.id, nextLocation)
+  }), /*#__PURE__*/React.createElement(AttendanceStatusSelect, {
+    value: log.attendanceStatus || "",
+    onChange: nextStatus => updateLogAttendanceStatus(log.id, nextStatus)
   }), /*#__PURE__*/React.createElement("span", {
     className: "text-sm font-semibold text-slate-500"
   }, log.startTime, " - ", log.endTime)), /*#__PURE__*/React.createElement("p", {
@@ -2490,6 +2528,51 @@ function EditableLocationSelect({
     key: item.id,
     value: item.name
   }, item.name)));
+}
+function AttendanceStatusSelect({
+  value,
+  onChange
+}) {
+  const tone = {
+    Normal: {
+      bg: "#eef2ff",
+      border: "#c7d2fe",
+      color: "#4338ca"
+    },
+    Revised: {
+      bg: "#dcfce7",
+      border: "#bbf7d0",
+      color: "#15803d"
+    },
+    "not revised": {
+      bg: "#f8fafc",
+      border: "#cbd5e1",
+      color: "#475569"
+    }
+  }[value] || {
+    bg: "#ffffff",
+    border: "#cbd5e1",
+    color: "#475569"
+  };
+  return /*#__PURE__*/React.createElement("select", {
+    value: value,
+    onChange: event => onChange(event.target.value),
+    className: "w-full rounded-md border px-2.5 py-1.5 text-xs font-bold outline-none transition focus:ring-2 focus:ring-indigo-100 sm:w-44",
+    style: {
+      backgroundColor: tone.bg,
+      borderColor: tone.border,
+      color: tone.color
+    },
+    title: "Attendance status"
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "Attendance status"), /*#__PURE__*/React.createElement("option", {
+    value: "Normal"
+  }, "Normal stampped"), /*#__PURE__*/React.createElement("option", {
+    value: "Revised"
+  }, "Revised"), /*#__PURE__*/React.createElement("option", {
+    value: "not revised"
+  }, "not revised"));
 }
 function StatusBadge({
   status
