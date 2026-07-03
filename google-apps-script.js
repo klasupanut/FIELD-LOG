@@ -1,5 +1,6 @@
 const SPREADSHEET_ID = "13eliZlc2a7XhyzG22Iv1du0KM02LyxyMidO1SDzTI-4";
 const TIME_ZONE = "Asia/Bangkok";
+const DATE_HEADERS = ["Work Date", "Due Date", "Start Date", "End Date"];
 
 const SHEETS = {
   appendWorkLog: {
@@ -12,6 +13,7 @@ const SHEETS = {
       "Location",
       "Note",
       "Sync Status",
+      "Attendance Status",
     ],
   },
   appendLocation: {
@@ -92,6 +94,12 @@ function doPost(e) {
     const sheet = spreadsheet.getSheetByName(config.name) || spreadsheet.insertSheet(config.name);
     ensureHeaders(sheet, config.headers);
 
+    if (payload.action === "appendWorkLog" && isWeekendDateKey(payload.row?.["Work Date"])) {
+      const rows = findRowsByColumnValue(sheet, config.headers, "Work Date", payload.row?.["Work Date"]);
+      rows.sort((a, b) => b - a).forEach((rowNumber) => sheet.deleteRow(rowNumber));
+      return jsonResponse({ ok: true, sheet: config.name, mode: "ignored_weekend", deletedRows: rows.length });
+    }
+
     const row = config.headers.map((header) => {
       if (header === "Sync Status") return "Synced";
       return payload.row?.[header] ?? "";
@@ -127,6 +135,7 @@ function doGet(e) {
 
     const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
     setSpreadsheetTimeZone(spreadsheet);
+    cleanupWeekendWorkLogs(spreadsheet);
     cleanupDuplicateRows(spreadsheet, SHEETS.appendWorkLog, "Work Date");
     cleanupDuplicateRows(spreadsheet, SHEETS.appendTodo, "Timestamp Created");
     cleanupDuplicateRows(spreadsheet, SHEETS.appendProject, "Timestamp Created");
@@ -174,12 +183,12 @@ function cleanupDuplicateRows(spreadsheet, config, uniqueHeaderName) {
   const lastRow = sheet.getLastRow();
   if (!columnIndex || lastRow < 3) return 0;
 
-  const values = sheet.getRange(2, columnIndex, lastRow - 1, 1).getDisplayValues();
+  const values = sheet.getRange(2, columnIndex, lastRow - 1, 1).getValues();
   const latestRowByValue = {};
   const duplicateRows = [];
 
   values.forEach((row, index) => {
-    const value = String(row[0]).trim();
+    const value = formatSheetCell(uniqueHeaderName, row[0]).trim();
     if (!value) return;
     const rowNumber = index + 2;
     if (latestRowByValue[value]) duplicateRows.push(latestRowByValue[value]);
@@ -190,6 +199,32 @@ function cleanupDuplicateRows(spreadsheet, config, uniqueHeaderName) {
   return duplicateRows.length;
 }
 
+function cleanupWeekendWorkLogs(spreadsheet) {
+  const config = SHEETS.appendWorkLog;
+  const sheet = spreadsheet.getSheetByName(config.name);
+  if (!sheet) return 0;
+  ensureHeaders(sheet, config.headers);
+
+  const columnIndex = config.headers.indexOf("Work Date") + 1;
+  const lastRow = sheet.getLastRow();
+  if (!columnIndex || lastRow < 2) return 0;
+
+  const values = sheet.getRange(2, columnIndex, lastRow - 1, 1).getValues();
+  const rowsToDelete = values
+    .map((row, index) => (isWeekendDateKey(formatSheetCell("Work Date", row[0]).trim()) ? index + 2 : null))
+    .filter(Boolean);
+
+  rowsToDelete.sort((a, b) => b - a).forEach((rowNumber) => sheet.deleteRow(rowNumber));
+  return rowsToDelete.length;
+}
+
+function isWeekendDateKey(dateKey) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateKey || ""))) return false;
+  const parts = String(dateKey).split("-").map(Number);
+  const weekday = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2])).getUTCDay();
+  return weekday === 0 || weekday === 6;
+}
+
 function readSheet(spreadsheet, config) {
   const sheet = spreadsheet.getSheetByName(config.name);
   if (!sheet) return [];
@@ -198,13 +233,21 @@ function readSheet(spreadsheet, config) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
-  const rows = sheet.getRange(2, 1, lastRow - 1, config.headers.length).getDisplayValues();
+  const rows = sheet.getRange(2, 1, lastRow - 1, config.headers.length).getValues();
   return rows
     .filter((row) => row.some((cell) => String(cell).trim()))
     .map((row) => config.headers.reduce((item, header, index) => {
-      item[header] = row[index] || "";
+      item[header] = formatSheetCell(header, row[index]);
       return item;
     }, {}));
+}
+
+function formatSheetCell(header, value) {
+  if (value === null || value === undefined) return "";
+  if (DATE_HEADERS.indexOf(header) !== -1 && Object.prototype.toString.call(value) === "[object Date]") {
+    return Utilities.formatDate(value, TIME_ZONE, "yyyy-MM-dd");
+  }
+  return String(value);
 }
 
 function findRowByColumnValue(sheet, headers, headerName, value) {
@@ -220,10 +263,10 @@ function findRowsByColumnValue(sheet, headers, headerName, value) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
-  const values = sheet.getRange(2, columnIndex, lastRow - 1, 1).getDisplayValues();
+  const values = sheet.getRange(2, columnIndex, lastRow - 1, 1).getValues();
   const target = String(value).trim();
   return values
-    .map((row, index) => (String(row[0]).trim() === target ? index + 2 : null))
+    .map((row, index) => (formatSheetCell(headerName, row[0]).trim() === target ? index + 2 : null))
     .filter(Boolean);
 }
 
